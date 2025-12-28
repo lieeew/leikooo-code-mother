@@ -1,0 +1,72 @@
+spring:
+  profiles:
+    active: local
+  application:
+    name: leikooo-code-mother
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/leikooo_code_mother?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: <password>
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      timeout: 60
+      database: 10
+      lettuce:
+        pool:
+          max-active: 200
+          max-wait: -1ms
+          max-idle: 10
+          min-idle: 0
+  mail:
+    host: smtp.126.com
+    port: 465
+    username: xxxxxxx@126.com
+    password: 授权密码
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          socketFactory:
+            fallback: false
+    protocol: smtp
+server:
+  port: 8238
+  servlet:
+    context-path: /api
+sa-token:
+  jwt-secret-key: key
+# AI 配置
+langchain4j:
+  open-ai:
+    chat-model:
+      api-key: <API_KEY>
+      base-url: <服务商地址>
+      model-name: <大模型名字>
+      temperature: 0.2
+      timeout: 12m
+      log-responses: true
+      log-requests: true
+    streaming-chat-model:
+      api-key: <API_KEY>
+      base-url: <服务商地址>
+      model-name: <大模型名字>
+      temperature: 0.2
+      timeout: 12m
+      log-responses: true
+      log-requests: true
+# springdoc-openapi项目配置
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      packages-to-scan: com.leikooo.codemother.controller
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn

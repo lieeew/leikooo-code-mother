@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>验证码</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .content {
+            font-size: 16px;
+            color: #666;
+            line-height: 1.6;
+        }
+        .code {
+            display: inline-block;
+            background-color: #f0f0f0;
+            padding: 15px 30px;
+            font-size: 28px;
+            font-weight: bold;
+            color: #007bff;
+            border-radius: 4px;
+            margin: 20px 0;
+            letter-spacing: 5px;
+        }
+        .footer {
+            margin-top: 30px;
+            font-size: 14px;
+            color: #999;
+            border-top: 1px solid #e0e0e0;
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">验证码</div>
+        <div class="content">
+            <p>您好，</p>
+            <p>您正在进行身份验证，验证码如下：</p>
+            <div class="code">${code}</div>
+            <p>验证码有效期为 5 分钟，请尽快完成验证。</p>
+            <p>如果这不是您本人的操作，请忽略此邮件。</p>
+        </div>
+        <div class="footer">
+            <p>此邮件由系统自动发送，请勿回复。</p>
+        </div>
+    </div>
+</body>
+</html>
