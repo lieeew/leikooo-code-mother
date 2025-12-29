@@ -26,11 +26,9 @@
             <groupId>org.springframework.session</groupId>
             <artifactId>spring-session-core</artifactId>
         </dependency>
-        <!-- https://mvnrepository.com/artifact/cn.bigmodel.openapi/oapi-big-sdk-v4 -->
         <dependency>
-            <groupId>ai.z.openapi</groupId>
-            <artifactId>zai-sdk</artifactId>
-            <version>0.1.3</version>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
         <dependency>
             <groupId>com.mysql</groupId>

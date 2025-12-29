@@ -274,4 +274,62 @@ declare namespace API {
     userRole?: string
     createTime?: string
   }
+
+  type BaseResponseBoolean = {
+    code?: number
+    data?: boolean
+    message?: string
+  }
+
+  type BaseResponseUserVO = {
+    code?: number
+    data?: UserVO
+    message?: string
+  }
+
+  type BaseResponseVerifyCodeVO = {
+    code?: number
+    data?: VerifyCodeVO
+    message?: string
+  }
+
+  type SendCodeRequest = {
+    email: string
+  }
+
+  type UserLoginRequest = {
+    userAccount: string
+    userPassword: string
+  }
+
+  type UserRegisterRequest = {
+    userName: string
+    userAccount: string
+    userPassword: string
+    checkPassword: string
+    userEmail: string
+  }
+
+  type UserVO = {
+    id?: number
+    userAccount?: string
+    userName?: string
+    userAvatar?: string
+    userProfile?: string
+    userRole?: string
+    editTime?: string
+    createTime?: string
+    updateTime?: string
+  }
+
+  type VerifyCodeRequest = {
+    email: string
+    code: string
+  }
+
+  type VerifyCodeVO = {
+    token?: string
+    email?: string
+  }
+
 }

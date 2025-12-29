@@ -3,8 +3,27 @@
     <h2 class="title">鱼皮 AI 应用生成 - 用户注册</h2>
     <div class="desc">不写一行代码，生成完整应用</div>
     <a-form :model="formState" name="basic" autocomplete="off" @finish="handleSubmit">
+      <a-form-item name="userName" :rules="[{ required: true, message: '请输入用户名' }]">
+        <a-input v-model:value="formState.userName" placeholder="请输入用户名" />
+      </a-form-item>
       <a-form-item name="userAccount" :rules="[{ required: true, message: '请输入账号' }]">
         <a-input v-model:value="formState.userAccount" placeholder="请输入账号" />
+      </a-form-item>
+      <a-form-item name="userEmail" :rules="[{ required: true, message: '请输入邮箱' }]">
+        <a-input v-model:value="formState.userEmail" placeholder="请输入邮箱" />
+      </a-form-item>
+      <a-form-item name="emailCode" :rules="[{ required: true, message: '请输入验证码' }]">
+        <a-input-search
+          v-model:value="formState.emailCode"
+          placeholder="请输入验证码"
+          @search="handleSendCode"
+        >
+          <template #enterButton>
+            <a-button :disabled="countdown > 0" :loading="codeLoading">
+              {{ countdown > 0 ? `${countdown}秒后重发` : '发送验证码' }}
+            </a-button>
+          </template>
+        </a-input-search>
       </a-form-item>
       <a-form-item
         name="userPassword"
@@ -38,24 +57,26 @@
 
 <script setup lang="ts">
 import {useRouter} from 'vue-router'
-import {userRegister} from '@/api/userController.ts'
+import {register, sendCode, verifyCode} from '@/api/userController.ts'
 import {message} from 'ant-design-vue'
-import {reactive} from 'vue'
+import {onBeforeUnmount, reactive, ref} from 'vue'
 
 const router = useRouter()
 
-const formState = reactive<API.UserRegisterRequest>({
+const formState = reactive<API.UserRegisterRequest & { emailCode: string }>({
+  userName: '',
   userAccount: '',
   userPassword: '',
   checkPassword: '',
+  userEmail: '',
+  emailCode: '',
 })
+const codeLoading = ref(false)
+const isCodeSent = ref(false)
+const countdown = ref(0)
+const verifyToken = ref('')
+let timer: number | null = null
 
-/**
- * 验证确认密码
- * @param rule
- * @param value
- * @param callback
- */
 const validateCheckPassword = (rule: unknown, value: string, callback: (error?: Error) => void) => {
   if (value && value !== formState.userPassword) {
     callback(new Error('两次输入密码不一致'))
@@ -64,23 +85,82 @@ const validateCheckPassword = (rule: unknown, value: string, callback: (error?: 
   }
 }
 
-/**
- * 提交表单
- * @param values
- */
-const handleSubmit = async (values: API.UserRegisterRequest) => {
-  const res = await userRegister(values)
-  // 注册成功，跳转到登录页面
-  if (res.data.code === 0) {
-    message.success('注册成功')
-    router.push({
-      path: '/user/login',
-      replace: true,
-    })
-  } else {
-    message.error('注册失败，' + res.data.message)
+const handleSendCode = async () => {
+  if (!formState.userEmail) {
+    message.error('请先输入邮箱')
+    return
+  }
+  codeLoading.value = true
+  try {
+    const res = await sendCode({ email: formState.userEmail })
+    if (res.data.code === 0) {
+      message.success('验证码已发送')
+      isCodeSent.value = true
+      startCountdown()
+    } else {
+      message.error('发送失败，' + res.data.message)
+    }
+  } catch (error) {
+    message.error('发送验证码失败')
+  } finally {
+    codeLoading.value = false
   }
 }
+
+const startCountdown = () => {
+  countdown.value = 180
+  timer = window.setInterval(() => {
+    countdown.value--
+    if (countdown.value <= 0) {
+      clearInterval(timer!)
+      timer = null
+      isCodeSent.value = false
+    }
+  }, 1000)
+}
+
+const handleSubmit = async (values: API.UserRegisterRequest & { emailCode: string }) => {
+  if (!formState.emailCode) {
+    message.error('请输入验证码')
+    return
+  }
+  codeLoading.value = true
+  try {
+    const verifyRes = await verifyCode({
+      email: formState.userEmail,
+      code: formState.emailCode,
+    })
+    if (verifyRes.data.code === 0 && verifyRes.data.data?.token) {
+      verifyToken.value = verifyRes.data.data.token
+      const registerRes = await register(values, {
+        headers: {
+          Authorization: `Bearer ${verifyToken.value}`,
+        },
+      })
+      if (registerRes.data.code === 0) {
+        message.success('注册成功')
+        router.push({
+          path: '/user/login',
+          replace: true,
+        })
+      } else {
+        message.error('注册失败，' + registerRes.data.message)
+      }
+    } else {
+      message.error('验证码验证失败，' + verifyRes.data.message)
+    }
+  } catch (error) {
+    message.error('注册失败')
+  } finally {
+    codeLoading.value = false
+  }
+}
+
+onBeforeUnmount(() => {
+  if (timer) {
+    clearInterval(timer)
+  }
+})
 </script>
 
 <style scoped>

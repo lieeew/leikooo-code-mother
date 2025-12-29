@@ -11,6 +11,7 @@ import com.leikooo.codemother.model.dto.request.VerifyCodeRequest;
 import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.model.vo.VerifyCodeVO;
 import com.leikooo.codemother.service.UserService;
+import com.leikooo.codemother.utils.HttpHeaderUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -50,7 +51,7 @@ public class UserController {
     public BaseResponse<UserVO> register(@RequestBody @Valid UserRegisterRequest request
             , HttpServletRequest httpRequest) {
         ThrowUtils.throwIf(Objects.isNull(request), ErrorCode.PARAMS_ERROR, "请求参数不能为空");
-        String token = httpRequest.getHeader("Token");
+        String token = HttpHeaderUtils.extractBearerToken(httpRequest.getHeader("Authorization"));
         return ResultUtils.success(userService.register(request, token));
     }
 
@@ -63,14 +64,16 @@ public class UserController {
     }
 
     /**
-     * 获取登录用户
-     * @param httpServletRequest httpRequest
+     * 获取当前登录用户
      * @return userVO
      */
     @PostMapping("/get")
-    public BaseResponse<UserVO> getUser(
-          HttpServletRequest httpServletRequest) {
-        ThrowUtils.throwIf(Objects.isNull(httpServletRequest), ErrorCode.PARAMS_ERROR, "请求参数不能为空");
-        return ResultUtils.success(userService.getUserLogin(httpServletRequest));
+    public BaseResponse<UserVO> getCurrentUser() {
+        return ResultUtils.success(userService.getUserLogin());
+    }
+
+    @PostMapping("logout")
+    public BaseResponse<Boolean> userLogout(HttpServletRequest httpServletRequest) {
+        return ResultUtils.success(userService.userLogout());
     }
 }

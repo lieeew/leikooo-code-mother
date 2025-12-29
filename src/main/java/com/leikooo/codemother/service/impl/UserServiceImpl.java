@@ -2,6 +2,7 @@ package com.leikooo.codemother.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import cn.dev33.satoken.stp.parameter.SaLoginParameter;
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.RandomUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.github.benmanes.caffeine.cache.Cache;
@@ -20,7 +21,6 @@ import com.leikooo.codemother.model.vo.VerifyCodeVO;
 import com.leikooo.codemother.service.UserService;
 import com.leikooo.codemother.utils.MailSendUtils;
 import com.leikooo.codemother.utils.UuidV7Generator;
-import jakarta.servlet.http.HttpServletRequest;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RBucket;
 import org.redisson.api.RedissonClient;
@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 import static com.leikooo.codemother.constant.RedisConstant.*;
 import static com.leikooo.codemother.constant.UserConstant.LOGIN_ATTRIBUTE;
 import static com.leikooo.codemother.exception.ErrorCode.PARAMS_ERROR;
+import static com.leikooo.codemother.exception.ErrorCode.SYSTEM_ERROR;
 
 /**
  * @author leikooo
@@ -131,9 +132,25 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
                     .userRole(UserRoleEnum.USER.getValue())
                     .userPassword(getEncryptPassword(userPassword))
                     .build();
-            this.save(insertUser);
+            try {
+                this.save(insertUser);
+            } catch (Exception e) {
+                log.error("register user error {}", e);
+                throw new BusinessException(SYSTEM_ERROR, "注册失败");
+            }
+            invalidateRegisterCache(userEmail);
             return UserVO.toVO(insertUser);
         }
+    }
+
+    /**
+     * 注册完成之后失效缓存
+     * @param email 需要失效的 email
+     */
+    private void invalidateRegisterCache(String email) {
+        redissonClient.getBucket(buildRedisKey(MAIL_TOKEN_PREFIX, email)).delete();
+        redissonClient.getBucket(buildRedisKey(MAIL_SEND_FLAG_PREFIX, email)).delete();
+        redissonClient.getBucket(buildRedisKey(MAIL_PREFIX, email)).delete();
     }
 
     @Override
@@ -151,18 +168,33 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
                 .eq(User::getUserPassword, getEncryptPassword(userPassword)).one();
         ThrowUtils.throwIf(Objects.isNull(user), PARAMS_ERROR, "账号或者用户名错误");
         UserVO userVO = UserVO.toVO(user);
-        // 使用 STP 进行登录
+        // 使用 StpUtil 进行登录
         StpUtil.login(userVO.getId(), SaLoginParameter.create().setExtra(LOGIN_ATTRIBUTE, userVO));
         return userVO;
     }
 
     @Override
-    public UserVO getUserLogin(HttpServletRequest httpServletRequest) {
+    public UserVO getUserLogin() {
         Object loginId = StpUtil.getLoginIdDefaultNull();
         if (Objects.isNull(loginId)) {
             return new UserVO();
         }
-        return (UserVO) StpUtil.getExtra(LOGIN_ATTRIBUTE);
+        return BeanUtil.toBean(StpUtil.getExtra(LOGIN_ATTRIBUTE), UserVO.class);
+    }
+
+    @Override
+    public Boolean userLogout() {
+        Object loginId = StpUtil.getLoginIdDefaultNull();
+        if (Objects.isNull(loginId)) {
+            return false;
+        }
+        try {
+            StpUtil.logout(loginId);
+        } catch (Exception e) {
+            log.error("user logout error {}", e);
+            return false;
+        }
+        return true;
     }
 
 }

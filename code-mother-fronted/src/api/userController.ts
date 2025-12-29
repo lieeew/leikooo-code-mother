@@ -41,14 +41,6 @@ export async function getUserById(
   })
 }
 
-/** 此处后端没有提供注释 GET /user/get/login */
-export async function getLoginUser(options?: { [key: string]: any }) {
-  return request<API.BaseResponseLoginUserVO>('/user/get/login', {
-    method: 'GET',
-    ...(options || {}),
-  })
-}
-
 /** 此处后端没有提供注释 GET /user/get/vo */
 export async function getUserVoById(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
@@ -70,18 +62,6 @@ export async function listUserVoByPage(
   options?: { [key: string]: any }
 ) {
   return request<API.BaseResponsePageUserVO>('/user/list/page/vo', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    data: body,
-    ...(options || {}),
-  })
-}
-
-/** 此处后端没有提供注释 POST /user/login */
-export async function userLogin(body: API.UserLoginRequest, options?: { [key: string]: any }) {
-  return request<API.BaseResponseLoginUserVO>('/user/login', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -117,6 +97,62 @@ export async function userRegister(
 /** 此处后端没有提供注释 POST /user/update */
 export async function updateUser(body: API.UserUpdateRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseBoolean>('/user/update', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+/** 此处后端没有提供注释 POST /user/get */
+export async function getCurrentUser(options?: { [key: string]: any }) {
+  return request<API.BaseResponseUserVO>('/user/get', {
+    method: 'POST',
+    ...(options || {}),
+  })
+}
+
+/** 此处后端没有提供注释 POST /user/login */
+export async function userLogin(body: API.UserLoginRequest, options?: { [key: string]: any }) {
+  return request<API.BaseResponseUserVO>('/user/login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+/** 此处后端没有提供注释 POST /user/register */
+export async function register(body: API.UserRegisterRequest, options?: { [key: string]: any }) {
+  return request<API.BaseResponseUserVO>('/user/register', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+/** 此处后端没有提供注释 POST /user/send-code */
+export async function sendCode(body: API.SendCodeRequest, options?: { [key: string]: any }) {
+  return request<API.BaseResponseBoolean>('/user/send-code', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+/** 此处后端没有提供注释 POST /user/verify-code */
+export async function verifyCode(body: API.VerifyCodeRequest, options?: { [key: string]: any }) {
+  return request<API.BaseResponseVerifyCodeVO>('/user/verify-code', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

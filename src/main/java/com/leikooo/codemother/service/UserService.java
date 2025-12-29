@@ -8,7 +8,6 @@ import com.leikooo.codemother.model.dto.request.VerifyCodeRequest;
 import com.leikooo.codemother.model.entity.User;
 import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.model.vo.VerifyCodeVO;
-import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * @author leikooo
@@ -53,8 +52,13 @@ public interface UserService extends IService<User> {
 
     /**
      * 获取登录用户的信息
-     * @param httpServletRequest httpRequest
-     * @return
+     * @return 当前登录的信息
      */
-    UserVO getUserLogin(HttpServletRequest httpServletRequest);
+    UserVO getUserLogin();
+
+    /**
+     * 用户取消登录
+     * @return 是否注销成功
+     */
+    Boolean userLogout();
 }
