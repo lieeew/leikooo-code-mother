@@ -59,6 +59,15 @@ langchain4j:
       timeout: 12m
       log-responses: true
       log-requests: true
+
+app:
+  code-generator:
+    output-dir: generated-apps
+    max-file-size: 10485760
+    allowed-extensions:
+      - .html
+      - .css
+      - .js
 # springdoc-openapi项目配置
 springdoc:
   api-docs:
