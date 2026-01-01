@@ -5,8 +5,6 @@ import cn.dev33.satoken.stp.parameter.SaLoginParameter;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.RandomUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leikooo.codemother.exception.BusinessException;
 import com.leikooo.codemother.exception.ThrowUtils;
 import com.leikooo.codemother.mapper.UserMapper;
@@ -28,15 +26,13 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
-import java.time.Duration;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static com.leikooo.codemother.constant.RedisConstant.*;
 import static com.leikooo.codemother.constant.UserConstant.LOGIN_ATTRIBUTE;
-import static com.leikooo.codemother.exception.ErrorCode.PARAMS_ERROR;
-import static com.leikooo.codemother.exception.ErrorCode.SYSTEM_ERROR;
+import static com.leikooo.codemother.exception.ErrorCode.*;
 
 /**
  * @author leikooo
@@ -46,14 +42,6 @@ import static com.leikooo.codemother.exception.ErrorCode.SYSTEM_ERROR;
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         implements UserService {
-
-    /**
-     * cache
-     */
-    private static final Cache<String, String> REGISTER_CACHE = Caffeine.newBuilder()
-            .maximumSize(10_00)
-            .expireAfterWrite(Duration.ofMinutes(5))
-            .build();
 
     private final JavaMailSender javaMailSender;
     private final RedissonClient redissonClient;
@@ -177,7 +165,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     public UserVO getUserLogin() {
         Object loginId = StpUtil.getLoginIdDefaultNull();
         if (Objects.isNull(loginId)) {
-            return new UserVO();
+            throw new BusinessException(NOT_LOGIN_ERROR);
         }
         return BeanUtil.toBean(StpUtil.getExtra(LOGIN_ATTRIBUTE), UserVO.class);
     }
