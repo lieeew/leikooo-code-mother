@@ -2,10 +2,12 @@ package com.leikooo.codemother.model.vo;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.leikooo.codemother.model.entity.User;
+import com.leikooo.codemother.utils.UuidV7Generator;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.nio.ByteBuffer;
 import java.util.Date;
 
 /**
@@ -21,7 +23,7 @@ public class UserVO {
     /**
      * id
      */
-    private Long id;
+    private String id;
 
     /**
      * 账号
@@ -66,6 +68,9 @@ public class UserVO {
     public static UserVO toVO(User user) {
         UserVO userVO = new UserVO();
         BeanUtil.copyProperties(user, userVO);
+        if (user.getId() != null) {
+            userVO.setId(UuidV7Generator.bytesToUuid(user.getId()));
+        }
         return userVO;
     }
 }

@@ -1,7 +1,6 @@
 package com.leikooo.codemother.controller;
 
 import com.leikooo.codemother.ai.AiChatClient;
-import com.leikooo.codemother.ai.advisor.ToolAdvisor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -26,10 +25,10 @@ public class ChatController {
     }
 
 
-    @GetMapping("/ai/generate")
-    public Map<String, String> generate(@RequestParam(value = "message", defaultValue = "Tell me a joke") String message) {
-        return Map.of("generation", this.aiChatClient.generateCode(message));
-    }
+//    @GetMapping("/ai/generate")
+//    public Map<String, String> generate(@RequestParam(value = "message", defaultValue = "Tell me a joke") String message) {
+//        return Map.of("generation", this.aiChatClient.generateCode(message));
+//    }
 
     @GetMapping("/ai/generateStream")
     public Flux<ChatClientResponse> generateStream(@RequestParam(value = "message", defaultValue = "Tell me a joke") String message) {
@@ -42,7 +41,7 @@ public class ChatController {
 //                    System.out.println("signalType = " + signalType);
 //                });
         Flux<ChatClientResponse> call = chatClient.prompt("给我讲一个故事")
-                .advisors(new ToolAdvisor())
+                .advisors()
                 .stream().chatClientResponse();
         return call.doOnNext(response -> {
             System.out.println("message = " + response);

@@ -1,10 +1,10 @@
 package com.leikooo.codemother.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.leikooo.codemother.model.dto.request.SendCodeRequest;
-import com.leikooo.codemother.model.dto.request.UserLoginRequest;
-import com.leikooo.codemother.model.dto.request.UserRegisterRequest;
-import com.leikooo.codemother.model.dto.request.VerifyCodeRequest;
+import com.leikooo.codemother.model.dto.request.user.SendCodeRequest;
+import com.leikooo.codemother.model.dto.request.user.UserLoginRequest;
+import com.leikooo.codemother.model.dto.request.user.UserRegisterRequest;
+import com.leikooo.codemother.model.dto.request.user.VerifyCodeRequest;
 import com.leikooo.codemother.model.entity.User;
 import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.model.vo.VerifyCodeVO;

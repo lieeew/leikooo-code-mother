@@ -19,14 +19,14 @@ declare namespace API {
     pageSize?: number
     sortField?: string
     sortOrder?: string
-    id?: number
+    id?: string | number
     appName?: string
     cover?: string
     initPrompt?: string
     codeGenType?: string
     deployKey?: string
     priority?: number
-    userId?: number
+    userId?: string
   }
 
   type AppUpdateRequest = {
@@ -35,7 +35,7 @@ declare namespace API {
   }
 
   type AppVO = {
-    id?: number
+    id?: string | number
     appName?: string
     cover?: string
     initPrompt?: string
@@ -43,7 +43,7 @@ declare namespace API {
     deployKey?: string
     deployedTime?: string
     priority?: number
-    userId?: number
+    userId?: string
     createTime?: string
     updateTime?: string
     user?: UserVO
@@ -134,16 +134,16 @@ declare namespace API {
   }
 
   type chatToGenCodeParams = {
-    appId: number
+    appId: string | number
     message: string
   }
 
   type DeleteRequest = {
-    id?: number
+    id?: string | number
   }
 
   type downloadAppCodeParams = {
-    appId: number
+    appId: string | number
   }
 
   type getAppVOByIdByAdminParams = {
@@ -151,7 +151,7 @@ declare namespace API {
   }
 
   type getAppVOByIdParams = {
-    id: number
+    id: string | number
   }
 
   type getUserByIdParams = {
@@ -169,7 +169,7 @@ declare namespace API {
   }
 
   type LoginUserVO = {
-    id?: number
+    id?: string
     userAccount?: string
     userName?: string
     userAvatar?: string
@@ -266,7 +266,7 @@ declare namespace API {
   }
 
   type UserVO = {
-    id?: number
+    id?: string
     userAccount?: string
     userName?: string
     userAvatar?: string

@@ -34,31 +34,22 @@ spring:
           socketFactory:
             fallback: false
     protocol: smtp
+  ai:
+    openai:
+      api-key: <API-KEY>
+      base-url: https://api.qnaigc.com
+      chat:
+        options:
+          model: minimax/minimax-m2.1
+          temperature: 0.2
+          stream-usage: true
+          logprobs: true
 server:
   port: 8238
   servlet:
     context-path: /api
 sa-token:
   jwt-secret-key: key
-# AI 配置
-langchain4j:
-  open-ai:
-    chat-model:
-      api-key: <API_KEY>
-      base-url: <服务商地址>
-      model-name: <大模型名字>
-      temperature: 0.2
-      timeout: 12m
-      log-responses: true
-      log-requests: true
-    streaming-chat-model:
-      api-key: <API_KEY>
-      base-url: <服务商地址>
-      model-name: <大模型名字>
-      temperature: 0.2
-      timeout: 12m
-      log-responses: true
-      log-requests: true
 # springdoc-openapi项目配置
 springdoc:
   api-docs:

@@ -1,4 +1,4 @@
-package com.leikooo.codemother.model.dto.request;
+package com.leikooo.codemother.model.dto.request.user;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
