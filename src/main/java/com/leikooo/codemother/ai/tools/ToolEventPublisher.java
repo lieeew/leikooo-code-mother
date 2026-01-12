@@ -1,4 +1,4 @@
-package com.leikooo.codemother.ai;
+package com.leikooo.codemother.ai.tools;
 
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;

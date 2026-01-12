@@ -293,6 +293,9 @@ const showAppDetail = () => {
 }
 
 
+// 初始化消息已发送标记
+const initialMessageSent = ref(false)
+
 const fetchAppInfo = async () => {
   const id = route.params.id as string
   if (!id) {
@@ -308,8 +311,8 @@ const fetchAppInfo = async () => {
     if (res.data.code === 0 && res.data.data) {
       appInfo.value = res.data.data
 
-      // 检查是否需要自动发送初始提示词
-      if (appInfo.value.initPrompt && isOwner.value) {
+      if (appInfo.value.initPrompt && isOwner.value && !initialMessageSent.value) {
+        initialMessageSent.value = true
         await sendInitialMessage(appInfo.value.initPrompt)
       }
     } else {

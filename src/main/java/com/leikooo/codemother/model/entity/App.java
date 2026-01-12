@@ -9,11 +9,13 @@ import lombok.Data;
 
 /**
  * App
+ * @author leikooo
  * @TableName app
  */
 @TableName(value = "app")
 @Data
-public class App implements Serializable {
+public class
+App implements Serializable {
     /**
      * 主键
      */
@@ -37,6 +39,12 @@ public class App implements Serializable {
      */
     @TableField(value = "initPrompt")
     private String initPrompt;
+
+    /**
+     * 代码生成类型（枚举）
+     */
+    @TableField(value = "codeGenType")
+    private String codeGenType;
 
     /**
      * 部署后的唯一标识

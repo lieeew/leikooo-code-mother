@@ -28,6 +28,7 @@ create table if not exists app
     appName    varchar(256)                       null comment 'appName',
     cover      varchar(256)                       null comment '封面地址',
     initPrompt text                               not null comment '初始化 prompt',
+    codeGenType  varchar(64)                        null comment '代码生成类型（枚举）',
     deployKey  varchar(64)                        null comment '部署后的唯一标识',
     userId     BINARY(16)                         not null comment '创建用户 ID',
     editTime   datetime default CURRENT_TIMESTAMP not null comment '编辑时间',

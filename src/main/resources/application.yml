@@ -44,8 +44,14 @@ spring:
           temperature: 0.2
           stream-usage: true
           logprobs: true
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: always
+            platform: mysql
 server:
-  port: 8238
+  port: 8438
   servlet:
     context-path: /api
 sa-token:

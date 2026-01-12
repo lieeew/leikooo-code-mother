@@ -9,6 +9,7 @@
         <result property="appName" column="appName"/>
         <result property="cover" column="cover"/>
         <result property="initPrompt" column="initPrompt"/>
+        <result property="codeGenType" column="codeGenType"/>
         <result property="deployKey" column="deployKey"/>
         <result property="editTime" column="editTime"/>
         <result property="createTime" column="createTime"/>
@@ -17,7 +18,7 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id,appName,cover,initPrompt,deployKey,editTime,
-        createTime,updateTime,isDelete,userId
+        id,appName,cover,initPrompt,codeGenType,deployKey,
+        editTime,createTime,updateTime,isDelete,userId
     </sql>
 </mapper>
