@@ -68,17 +68,17 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         String sessionId = genAppDto.getAppId();
         GenAppDto updateGenApp = generateGenAppType(genAppDto);
         Flux<ChatClientResponse> chatClientResponseFlux = aiChatClient.generateCode(updateGenApp);
+        CodeGenTypeEnum finalCodeGenType = updateGenApp.getCodeGenTypeEnum();
+        String projectPath = ResourcePathConstant.ROOT_PATH + File.separator + sessionId;
         Flux<String> codeFlux = chatClientResponseFlux
                 .map(response -> Optional.ofNullable(response.chatResponse()).map(ChatResponse::getResult).map(Generation::getOutput).map(AbstractMessage::getText).orElse(""))
                 .doFinally(signalType -> {
-                    CodeGenTypeEnum codeGenTypeEnum = updateGenApp.getCodeGenTypeEnum();
-                    // vue 项目需要执行 npm & build
-                    if (codeGenTypeEnum.equals(CodeGenTypeEnum.VUE_PROJECT)) {
-                        VueBuildUtils.buildVueProject(ResourcePathConstant.ROOT_PATH + File.separator + sessionId);
+                    toolEventPublisher.complete(sessionId);
+                    if (finalCodeGenType.equals(CodeGenTypeEnum.VUE_PROJECT)) {
+                        VueBuildUtils.buildVueProject(projectPath);
                     }
                 });
-        Flux<String> toolEventFlux = getToolEventFlux(sessionId);
-        return Flux.merge(codeFlux, toolEventFlux);
+        return Flux.merge(codeFlux, getToolEventFlux(sessionId));
     }
 
     /**

@@ -25,6 +25,10 @@ public class ToolEventPublisher {
                 .filter(event -> sessionId.equals(event.sessionId()));
     }
 
+    public void complete(String sessionId) {
+        sink.tryEmitComplete();
+    }
+
     public record ToolEvent(String sessionId, String type, String toolName, String methodName, String toolCallId, Object result) {
     }
 }
