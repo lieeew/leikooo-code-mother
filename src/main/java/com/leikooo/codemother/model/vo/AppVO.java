@@ -3,16 +3,15 @@ package com.leikooo.codemother.model.vo;
 import cn.hutool.core.bean.BeanUtil;
 import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.utils.UuidV7Generator;
-import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.io.Serializable;
-import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 
 /**
  * 应用封装类
+ * @author leikooo
  */
 @Getter
 @Setter

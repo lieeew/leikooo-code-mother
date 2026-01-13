@@ -3,6 +3,7 @@ package com.leikooo.codemother.aop;
 import com.leikooo.codemother.annotation.AuthCheck;
 import com.leikooo.codemother.exception.BusinessException;
 import com.leikooo.codemother.exception.ErrorCode;
+import com.leikooo.codemother.exception.ThrowUtils;
 import com.leikooo.codemother.model.enums.UserRoleEnum;
 import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.service.UserService;
@@ -10,6 +11,8 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
+
+import java.util.Objects;
 
 /**
  * @author <a href="https://github.com/lieeew">leikooo</a>
@@ -34,6 +37,7 @@ public class AuthInterceptor {
         }
         UserRoleEnum requireUserRole = UserRoleEnum.getEnumByValue(mustRole);
         UserVO userLogin = userService.getUserLogin();
+        ThrowUtils.throwIf(Objects.isNull(userLogin), ErrorCode.NOT_LOGIN_ERROR);
         UserRoleEnum currentUserEnum = UserRoleEnum.getEnumByValue(userLogin.getUserRole());
         if (requireUserRole.equals(UserRoleEnum.ADMIN) && !currentUserEnum.equals(UserRoleEnum.ADMIN)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限");

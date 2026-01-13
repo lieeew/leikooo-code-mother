@@ -1,6 +1,8 @@
 package com.leikooo.codemother.model.enums;
 
 import cn.hutool.core.util.ObjUtil;
+import com.leikooo.codemother.exception.BusinessException;
+import com.leikooo.codemother.exception.ErrorCode;
 import lombok.Getter;
 
 /**
@@ -37,6 +39,6 @@ public enum CodeGenTypeEnum {
                 return anEnum;
             }
         }
-        return null;
+        throw new BusinessException(ErrorCode.PARAMS_ERROR, "CodeGenTypeEnum 枚举类不存在");
     }
 }

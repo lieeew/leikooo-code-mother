@@ -61,4 +61,10 @@ public interface UserService extends IService<User> {
      * @return 是否注销成功
      */
     Boolean userLogout();
+
+    /**
+     * 判断是否是管理员
+     * @return 返回是否是管理员 true-管理员 false-非管理员
+     */
+    boolean isAdmin();
 }

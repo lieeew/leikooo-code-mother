@@ -1,11 +1,16 @@
 package com.leikooo.codemother.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.IService;
+import com.leikooo.codemother.model.dto.AppQueryDto;
 import com.leikooo.codemother.model.dto.CreatAppDto;
 import com.leikooo.codemother.model.dto.GenAppDto;
 import com.leikooo.codemother.model.entity.App;
-import com.baomidou.mybatisplus.extension.service.IService;
 import com.leikooo.codemother.model.vo.AppVO;
 import reactor.core.publisher.Flux;
+
+import java.util.List;
 
 /**
  * @author leikooo
@@ -31,7 +36,20 @@ public interface AppService extends IService<App> {
     /**
      * 获取 AppVO
      * @param id id
-     * @return
+     * @return AppVO
      */
     AppVO getAppVO(Long id);
+
+    /**
+     *
+     * @param appQueryRequest
+     * @return
+     */
+    QueryWrapper<App> getQueryWrapper(AppQueryDto appQueryDto);
+
+    /**
+     *
+     * @return lists
+     */
+    List<AppVO> getAppVOList(Page<App> appPage);
 }

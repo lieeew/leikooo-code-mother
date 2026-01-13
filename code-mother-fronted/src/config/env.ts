@@ -7,7 +7,7 @@ import {CodeGenTypeEnum} from "@/utils/codeGenTypes.ts";
 export const DEPLOY_DOMAIN = import.meta.env.VITE_DEPLOY_DOMAIN || 'http://localhost'
 
 // API 基础地址
-export const API_BASE_URL = 'http://localhost:8323/api'
+export const API_BASE_URL = 'http://localhost:8438/api'
 
 // 静态资源地址
 export const STATIC_BASE_URL = `${API_BASE_URL}/static`
@@ -19,8 +19,7 @@ export const getDeployUrl = (deployKey: string) => {
 
 // 获取静态资源预览URL
 export const getStaticPreviewUrl = (codeGenType: string, appId: string) => {
-  const baseUrl = `${STATIC_BASE_URL}/${codeGenType}_${appId}/`
-  // 如果是 Vue 项目，浏览地址需要添加 dist 后缀
+  const baseUrl = `${STATIC_BASE_URL}/${appId}/`
   if (codeGenType === CodeGenTypeEnum.VUE_PROJECT) {
     return `${baseUrl}dist/index.html`
   }

@@ -4,29 +4,38 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * @author leikooo
  */
 @Component
 public class ToolEventPublisher {
 
-    private final Sinks.Many<ToolEvent> sink = Sinks.many().multicast().onBackpressureBuffer();
+    private final Map<String, Sinks.Many<ToolEvent>> sinks = new ConcurrentHashMap<>();
+
+    private Sinks.Many<ToolEvent> getSink(String sessionId) {
+        return sinks.computeIfAbsent(sessionId, k -> Sinks.many().multicast().onBackpressureBuffer());
+    }
 
     public void publishToolCall(String sessionId, String toolName, String methodName, String toolCallId) {
-        sink.tryEmitNext(new ToolEvent(sessionId, "tool_call", toolName, methodName, toolCallId, null));
+        getSink(sessionId).tryEmitNext(new ToolEvent(sessionId, "tool_call", toolName, methodName, toolCallId, null));
     }
 
     public void publishToolResult(String sessionId, String toolName, String methodName, String toolCallId, Object result) {
-        sink.tryEmitNext(new ToolEvent(sessionId, "tool_result", toolName, methodName, toolCallId, result));
+        getSink(sessionId).tryEmitNext(new ToolEvent(sessionId, "tool_result", toolName, methodName, toolCallId, result));
     }
 
     public Flux<ToolEvent> events(String sessionId) {
-        return sink.asFlux()
-                .filter(event -> sessionId.equals(event.sessionId()));
+        return getSink(sessionId).asFlux();
     }
 
     public void complete(String sessionId) {
-        sink.tryEmitComplete();
+        Sinks.Many<ToolEvent> sink = sinks.remove(sessionId);
+        if (sink != null) {
+            sink.tryEmitComplete();
+        }
     }
 
     public record ToolEvent(String sessionId, String type, String toolName, String methodName, String toolCallId, Object result) {

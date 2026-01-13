@@ -185,6 +185,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         return true;
     }
 
+    @Override
+    public boolean isAdmin() {
+        UserVO userLogin = this.getUserLogin();
+        String userRole = userLogin.getUserRole();
+        UserRoleEnum userRoleEnum = UserRoleEnum.getEnumByValue(userRole);
+        return UserRoleEnum.ADMIN.equals(userRoleEnum);
+    }
+
 }
 
 
