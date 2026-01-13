@@ -1,26 +1,21 @@
 package com.leikooo.codemother.ai;
 
+import com.leikooo.codemother.ai.advisor.SystemMessageFirstAdvisor;
 import com.leikooo.codemother.ai.advisor.ToolAdvisor;
 import com.leikooo.codemother.ai.tools.FileTools;
 import com.leikooo.codemother.ai.tools.TodolistTools;
 import com.leikooo.codemother.model.dto.GenAppDto;
 import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
-import org.checkerframework.checker.units.qual.C;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
-import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
-import org.springframework.util.ResourceUtils;
 import reactor.core.publisher.Flux;
 
-import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.util.Map;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -45,7 +40,7 @@ public class AiChatClient {
         this.chatMemoryRepository = chatMemoryRepository;
         this.chatClient = ChatClient
                 .builder(openAiChatModel)
-                .defaultAdvisors(new ToolAdvisor())
+                .defaultAdvisors(new ToolAdvisor(), new SystemMessageFirstAdvisor())
                 .defaultTools(todolistTools, fileTools)
                 .build();
     }
@@ -55,8 +50,9 @@ public class AiChatClient {
         String appId = genAppDto.getAppId();
         CodeGenTypeEnum codeGenTypeEnum = genAppDto.getCodeGenTypeEnum();
         ClassPathResource classPathResource = getClassPathResource(codeGenTypeEnum);
-        return chatClient.prompt(message)
+        return chatClient.prompt()
                 .tools()
+                .user(message)
                 .advisors(advisorSpec -> advisorSpec.param(CONVERSATION_ID, appId))
                 .advisors(MessageChatMemoryAdvisor
                         .builder(MessageWindowChatMemory.builder()
