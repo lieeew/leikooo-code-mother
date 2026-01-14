@@ -1,5 +1,6 @@
 package com.leikooo.codemother.ai;
 
+import com.leikooo.codemother.ai.advisor.LogAdvisor;
 import com.leikooo.codemother.ai.advisor.SystemMessageFirstAdvisor;
 import com.leikooo.codemother.ai.advisor.ToolAdvisor;
 import com.leikooo.codemother.ai.tools.FileTools;
@@ -40,7 +41,7 @@ public class AiChatClient {
         this.chatMemoryRepository = chatMemoryRepository;
         this.chatClient = ChatClient
                 .builder(openAiChatModel)
-                .defaultAdvisors(new ToolAdvisor(), new SystemMessageFirstAdvisor())
+                .defaultAdvisors(new ToolAdvisor(), new SystemMessageFirstAdvisor(), new LogAdvisor())
                 .defaultTools(todolistTools, fileTools)
                 .build();
     }

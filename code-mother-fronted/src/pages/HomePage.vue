@@ -87,8 +87,14 @@ const loadMyApps = async () => {
     })
 
     if (res.data.code === 0 && res.data.data) {
-      myApps.value = res.data.data.records || []
-      myAppsPage.total = res.data.data.totalRow || 0
+      // 后端直接返回数组格式
+      if (Array.isArray(res.data.data)) {
+        myApps.value = res.data.data
+        myAppsPage.total = res.data.data.length
+      } else {
+        myApps.value = res.data.data.records || []
+        myAppsPage.total = res.data.data.totalRow || 0
+      }
     }
   } catch (error) {
     console.error('加载我的应用失败：', error)
