@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.leikooo.codemother.mapper.ToolCallRecordMapper">
+
+    <resultMap id="BaseResultMap" type="com.leikooo.codemother.model.entity.ToolCallRecord">
+            <id property="id" column="id" />
+            <result property="sessionId" column="sessionId" />
+            <result property="toolCallId" column="toolCallId" />
+            <result property="className" column="className" />
+            <result property="methodName" column="methodName" />
+            <result property="callType" column="callType" />
+            <result property="result" column="result" />
+            <result property="createTime" column="createTime" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,sessionId,toolCallId,className,methodName,callType,
+        result,createTime
+    </sql>
+</mapper>

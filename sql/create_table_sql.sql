@@ -38,3 +38,18 @@ create table if not exists app
     unique key uk_deploy (deployKey),
     key idx_userId (userId)
 ) comment 'App' collate utf8mb4_unicode_ci;
+
+-- Tool Call 记录表
+create table if not exists tool_call_record
+(
+    id          bigint primary key auto_increment comment '主键',
+    sessionId   varchar(64)                        not null comment '会话 ID',
+    toolCallId  varchar(64)                        not null comment '工具调用 ID',
+    className   varchar(256)                       not null comment '工具类名',
+    methodName  varchar(256)                       not null comment '工具方法名',
+    callType    varchar(32)                        not null comment '调用类型（call/result）',
+    result      text                               null comment '工具调用结果',
+    createTime  datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    key idx_sess4ionId (sessionId),
+    key idx_toolCallId (toolCallId)
+) comment '工具调用记录' collate utf8mb4_unicode_ci;

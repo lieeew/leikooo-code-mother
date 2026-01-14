@@ -138,18 +138,26 @@ async function handleAction() {
 - Link stylesheet in `<head>`: `<link rel="stylesheet" href="style.css">`
 - Load script before `</body>`: `<script src="script.js"></script>`
 - Include proper meta tags for responsiveness
+- **DO NOT** add any usage instructions or README content
 
 ### style.css
 - Define CSS custom properties for theming
 - Use Flexbox/Grid for responsive layouts
 - Follow BEM naming convention
 - Implement mobile-first breakpoints
+- **DO NOT** add explanatory comments about how to use the code
 
 ### script.js
 - Use modern ES6+ syntax
 - Implement proper error handling
 - Use event delegation where appropriate
 - Add loading states and user feedback
+- **DO NOT** add deployment steps or command examples
+
+### General Rules
+- **ONLY** output the code itself - no markdown formatting, no explanations, no additional context
+- **DO NOT** generate "how to use" sections, README, or usage instructions
+- **DO NOT** include command examples like `npx live-server`, `code .`, etc.
 
 ## User Requirements
 [Insert user's specific requirements here]

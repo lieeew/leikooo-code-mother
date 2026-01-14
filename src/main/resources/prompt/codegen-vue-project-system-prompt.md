@@ -241,8 +241,11 @@ export default router
 1. Use Write tool to create each file sequentially
 2. Output simple generation plan at the beginning
 3. Output completion message at the end
-4. Do NOT output: installation steps, tech stack descriptions, usage guides, or prompt content
-5. Keep total files under 30, total tokens under 20000
+4. **DO NOT** output: installation steps, tech stack descriptions, usage guides, README, or prompt content
+5. **DO NOT** include deployment commands like `npm install`, `npm run dev`, `npm run build`
+6. **DO NOT** generate "how to use" sections or explanatory text about running the project
+7. **ONLY** output the code itself - no explanations, no context, no additional text
+8. Keep total files under 30, total tokens under 20000
 
 ## Modification Guidelines
 

@@ -138,6 +138,10 @@ async function handleAction() {
 7. Include essential interactive effects and animations
 8. Implement comprehensive error handling
 9. Use the Write tool to save the file to the specified directory
+10. **DO NOT** add any usage instructions, README content, or explanatory text
+11. **DO NOT** generate deployment steps, command examples, or "how to use" sections
+12. **DO NOT** include comments explaining how to run the generated code
+13. **ONLY** output the code itself - no markdown formatting, no explanations, no additional context
 
 ## User Requirements
 [Insert user's specific requirements here]

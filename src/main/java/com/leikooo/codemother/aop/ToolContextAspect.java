@@ -1,6 +1,9 @@
 package com.leikooo.codemother.aop;
 
 import com.leikooo.codemother.ai.tools.ToolEventPublisher;
+import com.leikooo.codemother.model.entity.ToolCallRecord;
+import com.leikooo.codemother.model.enums.ToolCallTypeEnum;
+import com.leikooo.codemother.service.ToolCallRecordService;
 import com.leikooo.codemother.utils.ConversationIdUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.JoinPoint;
@@ -13,6 +16,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.stereotype.Component;
 
+import java.util.Date;
 import java.util.Objects;
 
 /**
@@ -24,9 +28,11 @@ import java.util.Objects;
 public class ToolContextAspect {
 
     private final ToolEventPublisher toolEventPublisher;
+    private final ToolCallRecordService toolCallRecordService;
 
-    public ToolContextAspect(ToolEventPublisher toolEventPublisher) {
+    public ToolContextAspect(ToolEventPublisher toolEventPublisher, ToolCallRecordService toolCallRecordService) {
         this.toolEventPublisher = toolEventPublisher;
+        this.toolCallRecordService = toolCallRecordService;
     }
 
     @Pointcut("execution(* com.leikooo.codemother.ai.tools..*.*(..)) && @annotation(org.springframework.ai.tool.annotation.Tool)")
@@ -64,8 +70,27 @@ public class ToolContextAspect {
         String sessionId = ConversationIdUtils.getConversationId(context);
         if (isBefore) {
             toolEventPublisher.publishToolCall(sessionId, className, methodName, toolCallId);
+            saveToolRecord(sessionId, toolCallId, className, methodName, ToolCallTypeEnum.CALL, null);
         } else {
             toolEventPublisher.publishToolResult(sessionId, className, methodName, toolCallId, result);
+            saveToolRecord(sessionId, toolCallId, className, methodName, ToolCallTypeEnum.RESULT, String.valueOf(result));
+        }
+    }
+
+    private void saveToolRecord(String sessionId, String toolCallId, String className, String methodName, ToolCallTypeEnum callType, String result) {
+        try {
+            ToolCallRecord record = ToolCallRecord.builder()
+                    .sessionId(sessionId)
+                    .toolCallId(toolCallId)
+                    .className(className)
+                    .methodName(methodName)
+                    .callType(callType.getValue())
+                    .result(result)
+                    .createTime(new Date())
+                    .build();
+            toolCallRecordService.save(record);
+        } catch (Exception e) {
+            log.error("保存 tool call 记录失败: {}", e.getMessage());
         }
     }
 
