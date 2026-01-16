@@ -1,6 +1,8 @@
 package com.leikooo.codemother.model.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -21,7 +23,7 @@ import java.util.Date;
 @AllArgsConstructor
 public class ToolCallRecord implements Serializable {
 
-    @TableField(value = "id")
+    @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
     @TableField(value = "sessionId")

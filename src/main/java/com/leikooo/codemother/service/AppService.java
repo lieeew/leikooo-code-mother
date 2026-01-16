@@ -41,14 +41,22 @@ public interface AppService extends IService<App> {
     AppVO getAppVO(Long id);
 
     /**
-     *
+     * todo
      * @param appQueryRequest
      * @return
      */
     QueryWrapper<App> getQueryWrapper(AppQueryDto appQueryDto);
 
     /**
-     *
+     * 修复构建错误
+     * @param appId appId
+     * @param errorAnalysis 错误分析结果
+     * @return 修复后的代码流
+     */
+    Flux<String> fixBuildError(String appId, String errorAnalysis);
+
+    /**
+     *  todo
      * @return lists
      */
     List<AppVO> getAppVOList(Page<App> appPage);

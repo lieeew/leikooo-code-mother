@@ -2,10 +2,7 @@ package com.leikooo.codemother.model.entity;
 
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.io.Serializable;
 import java.util.Date;
@@ -17,6 +14,7 @@ import java.util.Date;
  */
 @TableName(value ="spring_ai_chat_memory")
 @Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor

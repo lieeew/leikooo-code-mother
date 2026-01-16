@@ -18,7 +18,7 @@ Here is the JSON Schema instance your output must adhere to:
 {
   "$schema" : "https://json-schema.org/draft/2020-12/schema",
   "type" : "string",
-  "enum" : [ "HTML", "MULTI_FILE", "VUE_PROJECT" ]
+  "enum" : [ "html", "multi_file", "vue_project" ]
 }
 ```
 
@@ -134,7 +134,10 @@ Is a framework (Vue/React) specified?
    - Match existing project structure if provided
 
 ## Response Example
-<require>You *must* generate ""  such as "VUE_PROJECT" not VUE_PROJECT</require>
+Your output must be exactly one of these three values:
+- "html"
+- "multi_file"
+- "vue_project"
 
-"VUE_PROJECT" 
-
+## Output example
+"html"

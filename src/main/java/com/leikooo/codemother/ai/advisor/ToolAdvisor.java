@@ -1,18 +1,23 @@
 package com.leikooo.codemother.ai.advisor;
 
+import com.leikooo.codemother.ai.tools.ToolEventPublisher;
+import com.leikooo.codemother.utils.ConversationIdUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClientRequest;
 import org.springframework.ai.chat.client.ChatClientResponse;
-import org.springframework.ai.chat.client.advisor.ToolCallAdvisor;
+import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
+import org.springframework.ai.chat.client.advisor.api.StreamAdvisor;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisorChain;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.model.tool.DefaultToolCallingManager;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Sinks;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * @author <a href="https://github.com/lieeew">leikooo</a>
@@ -20,49 +25,70 @@ import java.util.List;
  * @description
  */
 @Slf4j
-public class ToolAdvisor extends ToolCallAdvisor {
+@Component
+public class ToolAdvisor implements CallAdvisor, StreamAdvisor {
 
-    public ToolAdvisor() {
-        super(DefaultToolCallingManager.builder().build(), 0);
+    private final ToolEventPublisher toolEventPublisher;
+
+    public ToolAdvisor(ToolEventPublisher toolEventPublisher) {
+        this.toolEventPublisher = toolEventPublisher;
     }
 
-    /**
-     * before tool calling
-     * @param chatClientRequest
-     * @param callAdvisorChain
-     * @return
-     */
     @Override
-    protected ChatClientRequest doBeforeCall(ChatClientRequest chatClientRequest, CallAdvisorChain callAdvisorChain) {
-        Prompt prompt = chatClientRequest.copy().prompt();
-        log.info("before tool calling {}", prompt);
-        return super.doBeforeCall(chatClientRequest, callAdvisorChain);
-    }
-
-    /**
-     * after tool calling
-     * @param chatClientResponse
-     * @param callAdvisorChain
-     * @return
-     */
-    @Override
-    protected ChatClientResponse doAfterCall(ChatClientResponse chatClientResponse, CallAdvisorChain callAdvisorChain) {
-        log.info("after tool call !");
-        ChatResponse chatResponse = chatClientResponse.copy().chatResponse();
-        if (chatResponse.hasToolCalls()) {
-            List<AssistantMessage.ToolCall> toolCalls = chatClientResponse.chatResponse().getResult().getOutput().getToolCalls();
-            toolCalls.forEach(toolCall -> {
-                log.info("tool calling {}", toolCall);
-            });
-        }
-        return super.doAfterCall(chatClientResponse, callAdvisorChain);
+    public ChatClientResponse adviseCall(ChatClientRequest chatClientRequest, CallAdvisorChain callAdvisorChain) {
+        return callAdvisorChain.nextCall(chatClientRequest);
     }
 
     @Override
     public Flux<ChatClientResponse> adviseStream(ChatClientRequest chatClientRequest, StreamAdvisorChain streamAdvisorChain) {
-        Flux<ChatClientResponse> chatClientResponseFlux = streamAdvisorChain.nextStream(chatClientRequest);
-        return chatClientResponseFlux.doOnNext(response -> {
-            log.info("res: {}", response);
-        });
+        String appId = ConversationIdUtils.getConversationId(chatClientRequest.context());
+        Sinks.Many<ChatClientResponse> toolSink = Sinks.many().multicast().onBackpressureBuffer();
+        
+        getToolEventFlux(appId).subscribe(toolSink::tryEmitNext);
+        
+        Flux<ChatClientResponse> mainFlux = streamAdvisorChain.nextStream(chatClientRequest)
+                .doFinally(signalType -> {
+                    toolSink.tryEmitComplete();
+                    toolEventPublisher.complete(appId);
+                });
+        
+        return Flux.merge(mainFlux, toolSink.asFlux());
     }
+
+    @Override
+    public String getName() {
+        return "ToolAdvisor";
+    }
+
+    @Override
+    public int getOrder() {
+        return Integer.MIN_VALUE + 100;
+    }
+
+    /**
+     * 工具调用推送流
+     * @param sessionId sessionId
+     * @return flux
+     */
+    private Flux<ChatClientResponse> getToolEventFlux(String sessionId) {
+        return toolEventPublisher.events(sessionId)
+                .map(event -> {
+                    Object result = Optional.ofNullable(event.result()).orElse("");
+                    final String methodName = event.methodName();
+                    String message = switch (event.type()) {
+                        case "tool_call" -> String.format("正在进行工具调用 %s: %s", methodName, result);
+                        case "tool_result" -> String.format("工具调用完成 %s: %s", methodName, result);
+                        default -> "";
+                    };
+                    return String.format("\n\n[选择工具] %s \n\n", message);
+                }).map(message -> {
+                    AssistantMessage assistantMessage = new AssistantMessage(message);
+                    Generation generation = new Generation(assistantMessage);
+                    ChatResponse chatResponse = ChatResponse.builder()
+                            .generations(List.of(generation))
+                            .build();
+                    return ChatClientResponse.builder().chatResponse(chatResponse).build();
+                });
+    }
+
 }

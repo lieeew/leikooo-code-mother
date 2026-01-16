@@ -2,6 +2,7 @@ package com.leikooo.codemother.mapper;
 
 import com.leikooo.codemother.model.entity.SpringAiChatMemory;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Mapper;
 
 /**
 * @author leikooo

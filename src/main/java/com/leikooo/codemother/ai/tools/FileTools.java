@@ -1,6 +1,11 @@
 package com.leikooo.codemother.ai.tools;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leikooo.codemother.config.CodeGeneratorConfig;
+import com.leikooo.codemother.model.entity.App;
+import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
+import com.leikooo.codemother.service.AppService;
 import com.leikooo.codemother.utils.ConversationIdUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -8,6 +13,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -16,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -24,11 +31,24 @@ import java.util.Set;
  * @author leikooo
  */
 @Slf4j
-@RequiredArgsConstructor
 @Component
 public class FileTools extends BaseTools {
 
     private final CodeGeneratorConfig config;
+    private final AppService appService;
+
+    private static final Cache<String, String> GEN_TYPE_CACHE = Caffeine.newBuilder()
+            .maximumSize(100)
+            .expireAfterWrite(Duration.ofMinutes(30))
+            .build();
+
+    private static final String HTML_EXTENSION = ".html";
+    private static final String INDEX_HTML = "index.html";
+
+    public FileTools(CodeGeneratorConfig config, @Lazy AppService appService) {
+        this.config = config;
+        this.appService = appService;
+    }
 
     /**
      *  写入文件
@@ -62,6 +82,13 @@ public class FileTools extends BaseTools {
             }
             if (StringUtils.isBlank(relativeFilePath)) {
                 throw new IllegalArgumentException("文件路径不能为空");
+            }
+            String fileExtension = getFileExtension(relativeFilePath);
+            if (HTML_EXTENSION.equals(fileExtension)) {
+                String genType = getGenTypeWithCache(conversationId);
+                if (CodeGenTypeEnum.HTML.getValue().equals(genType) || CodeGenTypeEnum.MULTI_FILE.getValue().equals(genType)) {
+                    relativeFilePath = INDEX_HTML;
+                }
             }
             String normalizedPath = normalizePath(relativeFilePath);
             Path outputDirPath = Paths.get(config.getOutputDir(), conversationId).toAbsolutePath().normalize();
@@ -340,6 +367,14 @@ public class FileTools extends BaseTools {
             return filename.substring(lastDot).toLowerCase();
         }
         return "";
+    }
+
+    private String getGenTypeWithCache(String conversationId) {
+        return GEN_TYPE_CACHE.get(conversationId, id -> {
+            Long appId = Long.parseLong(id);
+            App app = appService.getById(appId);
+            return app != null ? app.getCodeGenType() : null;
+        });
     }
 
     @Override
