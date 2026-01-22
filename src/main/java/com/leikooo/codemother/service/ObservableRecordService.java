@@ -10,4 +10,10 @@ import com.leikooo.codemother.model.entity.ObservableRecord;
  */
 public interface ObservableRecordService extends IService<ObservableRecord> {
 
+    /**
+     * todo
+     * @param appId
+     * @return
+     */
+    ObservableRecord getAppStatistics(String appId);
 }

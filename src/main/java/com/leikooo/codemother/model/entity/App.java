@@ -78,6 +78,12 @@ App implements Serializable {
     private Integer isDelete;
 
     /**
+     * 优先级
+     */
+    @TableField(value = "priority")
+    private Integer priority;
+
+    /**
      * 创建用户 ID
      */
     @TableField(value = "userId")

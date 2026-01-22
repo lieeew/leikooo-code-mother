@@ -3,6 +3,7 @@ package com.leikooo.codemother.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.leikooo.codemother.model.entity.ObservableRecord;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
 /**
  * @author leikooo
@@ -13,4 +14,5 @@ import org.apache.ibatis.annotations.Mapper;
 @Mapper
 public interface ObservableRecordMapper extends BaseMapper<ObservableRecord> {
 
+    ObservableRecord getAppStatistics(@Param("appId") String appId);
 }

@@ -56,6 +56,11 @@ server:
     context-path: /api
 sa-token:
   jwt-secret-key: key
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
 # springdoc-openapi项目配置
 springdoc:
   api-docs:

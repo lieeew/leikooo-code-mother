@@ -5,6 +5,7 @@ import com.knuddels.jtokkit.api.Encoding;
 import com.knuddels.jtokkit.api.EncodingType;
 import com.leikooo.codemother.model.entity.ObservableRecord;
 import com.leikooo.codemother.service.ObservableRecordService;
+import com.leikooo.codemother.service.ToolCallRecordService;
 import com.leikooo.codemother.utils.ConversationIdUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClientRequest;
@@ -15,9 +16,10 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.context.annotation.Lazy;
 import reactor.core.publisher.Flux;
-import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
+import java.util.Date;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -29,11 +31,13 @@ public class ObservableAdvisor implements CallAdvisor, StreamAdvisor {
 
     private final Encoding encoding;
     private final ObservableRecordService observableRecordService;
+    private final ToolCallRecordService toolCallRecordService;
 
-    public ObservableAdvisor(ObservableRecordService observableRecordService) {
+    public ObservableAdvisor(ObservableRecordService observableRecordService, ToolCallRecordService toolCallRecordService) {
+        this.toolCallRecordService = toolCallRecordService;
+        this.observableRecordService = observableRecordService;
         this.encoding = Encodings.newDefaultEncodingRegistry()
                 .getEncoding(EncodingType.CL100K_BASE);
-        this.observableRecordService = observableRecordService;
     }
 
     @Override
@@ -49,6 +53,9 @@ public class ObservableAdvisor implements CallAdvisor, StreamAdvisor {
     @Override
     public Flux<ChatClientResponse> adviseStream(ChatClientRequest request, StreamAdvisorChain chain) {
         long startTime = System.currentTimeMillis();
+        String conversationId = ConversationIdUtils.getConversationId(request.context());
+        long startToolCallCount = getCurrentToolCallCount(conversationId);
+
         StringBuilder contentAccumulator = new StringBuilder();
         AtomicLong promptTokens = new AtomicLong(0);
         AtomicLong completionTokens = new AtomicLong(0);
@@ -69,21 +76,29 @@ public class ObservableAdvisor implements CallAdvisor, StreamAdvisor {
                     Long pTokens = promptTokens.get() > 0 ? promptTokens.get() : null;
                     Long cTokens = completionTokens.get() > 0 ? completionTokens.get() : null;
 
-                    if (pTokens == null) {
-                        pTokens = (long) encoding.countTokens(request.prompt().getContents());
-                    }
-                    if (cTokens == null) {
-                        cTokens = (long) encoding.countTokens(contentAccumulator.toString());
-                    }
+                    pTokens = Optional.ofNullable(pTokens).orElse((long) encoding.countTokens(request.prompt().getContents()));
+                    cTokens = Optional.ofNullable(cTokens).orElse((long) encoding.countTokens(contentAccumulator.toString()));
 
-                    saveRecord(ConversationIdUtils.getConversationId(request.context()),
-                            pTokens, cTokens, startTime);
+                    long endToolCallCount = getCurrentToolCallCount(conversationId);
+                    long toolCallCount = Math.max(0, endToolCallCount - startToolCallCount);
+
+                    saveRecord(conversationId, pTokens, cTokens, toolCallCount, startTime);
                 });
+    }
+
+    private long getCurrentToolCallCount(String conversationId) {
+        try {
+            return toolCallRecordService.countBySessionId(conversationId);
+        } catch (Exception e) {
+            log.warn("Failed to count tool calls for session {}", conversationId, e);
+            return 0;
+        }
     }
 
     private void recordUsage(ChatClientRequest request, ChatResponse response, long startTime) {
         Usage usage = response.getMetadata().getUsage();
         String conversationId = ConversationIdUtils.getConversationId(request.context());
+        long startToolCallCount = getCurrentToolCallCount(conversationId);
 
         long pTokens;
         long cTokens;
@@ -98,10 +113,13 @@ public class ObservableAdvisor implements CallAdvisor, StreamAdvisor {
             cTokens = encoding.countTokens(outputContent);
         }
 
-        saveRecord(conversationId, pTokens, cTokens, startTime);
+        long endToolCallCount = getCurrentToolCallCount(conversationId);
+        long toolCallCount = Math.max(0, endToolCallCount - startToolCallCount);
+
+        saveRecord(conversationId, pTokens, cTokens, toolCallCount, startTime);
     }
 
-    private void saveRecord(String conversationId, long promptTokens, long completionTokens, long startTime) {
+    private void saveRecord(String conversationId, long promptTokens, long completionTokens, long toolCallCount, long startTime) {
         long duration = System.currentTimeMillis() - startTime;
 
         try {
@@ -110,13 +128,14 @@ public class ObservableAdvisor implements CallAdvisor, StreamAdvisor {
                     .inputTokens(promptTokens)
                     .outputTokens(completionTokens)
                     .durationMs(duration)
-                    .timestamp(java.util.Date.from(Instant.now()))
+                    .toolCallCount((int) toolCallCount)
+                    .timestamp(Date.from(Instant.now()))
                     .build();
 
             observableRecordService.save(entity);
 
-            log.info("[TokenUsage] ID: {}, Input: {}, Output: {}, Time: {}ms",
-                    conversationId, promptTokens, completionTokens, duration);
+            log.info("[TokenUsage] ID: {}, Input: {}, Output: {}, Time: {}ms, ToolCalls: {}",
+                    conversationId, promptTokens, completionTokens, duration, toolCallCount);
         } catch (Exception e) {
             log.error("Failed to save usage record", e);
         }

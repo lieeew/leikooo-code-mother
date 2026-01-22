@@ -4,15 +4,12 @@ import com.leikooo.codemother.ai.advisor.*;
 import com.leikooo.codemother.ai.tools.FileTools;
 import com.leikooo.codemother.ai.tools.TodolistTools;
 import com.leikooo.codemother.model.dto.GenAppDto;
-import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.model.enums.BuildResultEnum;
 import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
 import com.leikooo.codemother.service.ObservableRecordService;
 import com.leikooo.codemother.service.SpringAiChatMemoryService;
 import com.leikooo.codemother.service.ToolCallRecordService;
-import lombok.Getter;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
@@ -25,7 +22,6 @@ import reactor.core.publisher.Flux;
 
 import java.util.Map;
 
-import static com.leikooo.codemother.constant.AppConstant.GEN_APP_INFO;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
@@ -36,40 +32,21 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
  */
 @Component
 public class AiChatClient {
-    private final ChatModel openAiChatModel;
-    @Getter
     private final ChatClient chatClient;
-    private final TodolistTools todolistTools;
-    private final FileTools fileTools;
-    private final ToolAdvisor toolAdvisor;
-    private final MessageAggregatorAdvisor messageAggregatorAdvisor;
-    private final BuildAdvisor buildAdvisor;
-    private final ObservableRecordService observableRecordService;
-    private final ToolCallRecordService toolCallRecordService;
-    private final SpringAiChatMemoryService springAiChatMemoryService;
     private JdbcChatMemoryRepository chatMemoryRepository;
 
     public AiChatClient(ChatModel openAiChatModel, TodolistTools todolistTools, FileTools fileTools, ToolAdvisor toolAdvisor, MessageAggregatorAdvisor messageAggregatorAdvisor, BuildAdvisor buildAdvisor, ObservableRecordService observableRecordService, ToolCallRecordService toolCallRecordService, @Lazy SpringAiChatMemoryService springAiChatMemoryService, JdbcChatMemoryRepository chatMemoryRepository) {
-        this.openAiChatModel = openAiChatModel;
-        this.todolistTools = todolistTools;
-        this.fileTools = fileTools;
-        this.toolAdvisor = toolAdvisor;
-        this.messageAggregatorAdvisor = messageAggregatorAdvisor;
-        this.buildAdvisor = buildAdvisor;
-        this.observableRecordService = observableRecordService;
-        this.toolCallRecordService = toolCallRecordService;
-        this.springAiChatMemoryService = springAiChatMemoryService;
         this.chatMemoryRepository = chatMemoryRepository;
         this.chatClient = ChatClient
                 .builder(openAiChatModel)
                 .defaultAdvisors(buildAdvisor, toolAdvisor, messageAggregatorAdvisor, buildAdvisor,
                         new SystemMessageFirstAdvisor(), new LogAdvisor(),
-                        new ObservableAdvisor(observableRecordService))
+                        new ObservableAdvisor(observableRecordService, toolCallRecordService))
                 .defaultTools(todolistTools, fileTools)
                 .build();
     }
 
-    public Flux<ChatClientResponse> generateCode(GenAppDto genAppDto) {
+    public Flux<String> generateCode(GenAppDto genAppDto) {
         String message = genAppDto.getMessage();
         String appId = genAppDto.getAppId();
         CodeGenTypeEnum codeGenTypeEnum = genAppDto.getCodeGenTypeEnum();
@@ -86,7 +63,7 @@ public class AiChatClient {
                         .build())
                 .system(classPathResource, UTF_8)
                 .toolContext(Map.of(CONVERSATION_ID, appId))
-                .stream().chatClientResponse();
+                .stream().content();
     }
 
     /**

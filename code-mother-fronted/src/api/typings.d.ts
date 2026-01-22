@@ -138,6 +138,10 @@ declare namespace API {
     message: string
   }
 
+  type cancelGenCodeParams = {
+    appId: string | number
+  }
+
   type DeleteRequest = {
     id?: string | number
   }

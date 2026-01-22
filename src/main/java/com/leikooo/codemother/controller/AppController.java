@@ -1,10 +1,13 @@
 package com.leikooo.codemother.controller;
 
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.leikooo.codemother.ai.GenerationManager;
 import com.leikooo.codemother.annotation.AuthCheck;
 import com.leikooo.codemother.commen.BaseResponse;
 import com.leikooo.codemother.commen.ResultUtils;
+import com.leikooo.codemother.constant.AppConstant;
 import com.leikooo.codemother.constant.UserConstant;
 import com.leikooo.codemother.exception.ErrorCode;
 import com.leikooo.codemother.exception.ThrowUtils;
@@ -20,6 +23,7 @@ import com.leikooo.codemother.service.AppService;
 import com.leikooo.codemother.service.UserService;
 import jakarta.validation.Valid;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
@@ -40,10 +44,12 @@ import java.util.Objects;
 public class AppController {
     private final AppService appService;
     private final UserService userService;
+    private final GenerationManager generationManager;
 
-    public AppController(AppService appService, UserService userService) {
+    public AppController(AppService appService, UserService userService, GenerationManager generationManager) {
         this.appService = appService;
         this.userService = userService;
+        this.generationManager = generationManager;
     }
 
     @PostMapping("/add")
@@ -76,8 +82,15 @@ public class AppController {
                                 .data("")
                                 .build()
                 )).doFinally(signalType -> {
-                    System.out.println("signalType = " + signalType);
+                    // doFinally
                 });
+    }
+
+    @PostMapping("/cancel/gen")
+    public BaseResponse<Boolean> cancelGeneration(@RequestParam(name = "appId") Long appId) {
+        ThrowUtils.throwIf(Objects.isNull(appId), ErrorCode.PARAMS_ERROR);
+        boolean cancelled = generationManager.cancel(appId.toString());
+        return ResultUtils.success(cancelled);
     }
 
     @GetMapping("/get/vo")
@@ -94,9 +107,61 @@ public class AppController {
         ThrowUtils.throwIf(pageSize > 50, ErrorCode.PARAMS_ERROR);
         UserVO userLogin = userService.getUserLogin();
         Page<App> page = appService.page(
-                Page.of(current, pageSize),
+                new Page<>(current, pageSize),
                 appService.getQueryWrapper(AppQueryDto.toDto(appQueryRequest, userLogin))
         );
-        return ResultUtils.success(appService.getAppVOList(page));
+        return ResultUtils.success(appService.getAppVOList(page.getRecords()));
+    }
+
+    /**
+     * 分页获取精选应用列表
+     *
+     * @param appQueryRequest 查询请求
+     * @return 精选应用列表
+     */
+    @PostMapping("/good/list/page/vo")
+    @Cacheable(
+            value = "good_app_page",
+            key = "T(com.leikooo.codemother.utils.CacheKeyGenerator).generateKey(#a0)",
+            condition = "#a0.pageSize <= 10"
+    )
+    public BaseResponse<Page<AppVO>> listGoodAppVOByPage(@RequestBody AppQueryRequest appQueryRequest) {
+        ThrowUtils.throwIf(appQueryRequest == null, ErrorCode.PARAMS_ERROR);
+        // 限制每页最多 20 个
+        long pageSize = appQueryRequest.getPageSize();
+        ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR, "每页最多查询 20 个应用");
+        long pageNum = appQueryRequest.getCurrent();
+        // 只查询精选的应用
+        appQueryRequest.setPriority(AppConstant.GOOD_APP_PRIORITY);
+        QueryWrapper<App> queryWrapper = appService.getQueryWrapper(AppQueryDto.toDto(appQueryRequest));
+        // 分页查询
+        Page<App> appPage = appService.page(Page.of(pageNum, pageSize), queryWrapper);
+        // 数据封装
+        Page<AppVO> appVoPage = new Page<>(pageNum, pageSize, appPage.getTotal());
+        List<AppVO> appVOList = appService.getAppVOList(appPage.getRecords());
+        appVoPage.setRecords(appVOList);
+        return ResultUtils.success(appVoPage);
+    }
+
+    /**
+     * 管理员分页获取应用列表
+     *
+     * @param appQueryRequest 查询请求
+     * @return 应用列表
+     */
+    @PostMapping("/admin/list/page/vo")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Page<AppVO>> listAppVOByPageByAdmin(@RequestBody AppQueryRequest appQueryRequest) {
+        ThrowUtils.throwIf(appQueryRequest == null, ErrorCode.PARAMS_ERROR);
+        int pageNum = appQueryRequest.getCurrent();
+        int pageSize = appQueryRequest.getPageSize();
+        QueryWrapper<App> queryWrapper = appService.getQueryWrapper(AppQueryDto.toDto(appQueryRequest));
+        // 分页查询
+        Page<App> appPage = appService.page(Page.of(pageNum, pageSize), queryWrapper);
+        // 数据封装
+        Page<AppVO> appVoPage = new Page<>(pageNum, pageSize, appPage.getTotal());
+        List<AppVO> appVOList = appService.getAppVOList(appPage.getRecords());
+        appVoPage.setRecords(appVOList);
+        return ResultUtils.success(appVoPage);
     }
 }

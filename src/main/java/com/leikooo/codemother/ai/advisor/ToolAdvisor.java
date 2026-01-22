@@ -42,17 +42,10 @@ public class ToolAdvisor implements CallAdvisor, StreamAdvisor {
     @Override
     public Flux<ChatClientResponse> adviseStream(ChatClientRequest chatClientRequest, StreamAdvisorChain streamAdvisorChain) {
         String appId = ConversationIdUtils.getConversationId(chatClientRequest.context());
-        Sinks.Many<ChatClientResponse> toolSink = Sinks.many().multicast().onBackpressureBuffer();
-        
-        getToolEventFlux(appId).subscribe(toolSink::tryEmitNext);
-        
+        Flux<ChatClientResponse> toolEventFlux = getToolEventFlux(appId);
         Flux<ChatClientResponse> mainFlux = streamAdvisorChain.nextStream(chatClientRequest)
-                .doFinally(signalType -> {
-                    toolSink.tryEmitComplete();
-                    toolEventPublisher.complete(appId);
-                });
-        
-        return Flux.merge(mainFlux, toolSink.asFlux());
+                .doFinally(signalType -> toolEventPublisher.complete(appId));
+        return Flux.merge(mainFlux, toolEventFlux);
     }
 
     @Override

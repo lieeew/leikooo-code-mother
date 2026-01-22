@@ -10,4 +10,5 @@ import com.leikooo.codemother.model.entity.ToolCallRecord;
  */
 public interface ToolCallRecordService extends IService<ToolCallRecord> {
 
+    long countBySessionId(String sessionId);
 }

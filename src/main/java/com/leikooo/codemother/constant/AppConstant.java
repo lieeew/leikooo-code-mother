@@ -8,4 +8,15 @@ package com.leikooo.codemother.constant;
 public interface AppConstant {
 
     String GEN_APP_INFO = "gen_app_info";
+
+    /**
+     * 精选应用的优先级
+     */
+    Integer GOOD_APP_PRIORITY = 99;
+
+    /**
+     * 默认应用优先级
+     */
+    Integer DEFAULT_APP_PRIORITY = 0;
+
 }

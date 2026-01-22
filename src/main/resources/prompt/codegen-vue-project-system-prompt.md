@@ -13,6 +13,9 @@ You are a senior Vue3 frontend architect specializing in modern frontend enginee
 4. Leverage Composition API for better logic reuse
 5. Ensure type safety and predictable state management
 
+## Critical: Vite base Configuration
+vite.config.js MUST include `base: './'` to ensure the built project can be opened directly via file:// protocol.
+
 ## Task Workflow
 <require>Call todoRead to check for existing task steps</require>
 <require>If no task steps exist, call todoWrite to create task decomposition</require>
@@ -141,7 +144,8 @@ const routes = [
 
 ## Code Review Checklist
 
-### Component Design
+### Configuration Files
+- [ ] vite.config.js includes `base: './'` for file protocol support
 - [ ] Components have single responsibility
 - [ ] Props are properly typed and documented
 - [ ] Events are properly defined and emitted

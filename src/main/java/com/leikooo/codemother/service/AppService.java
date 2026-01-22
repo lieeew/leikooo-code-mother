@@ -42,7 +42,7 @@ public interface AppService extends IService<App> {
 
     /**
      * todo
-     * @param appQueryRequest
+     * @param appQueryDto appQueryDto
      * @return
      */
     QueryWrapper<App> getQueryWrapper(AppQueryDto appQueryDto);
@@ -59,5 +59,5 @@ public interface AppService extends IService<App> {
      *  todo
      * @return lists
      */
-    List<AppVO> getAppVOList(Page<App> appPage);
+    List<AppVO> getAppVOList(List<App> appPage);
 }

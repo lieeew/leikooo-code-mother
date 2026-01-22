@@ -30,13 +30,15 @@ create table if not exists app
     initPrompt  text                               not null comment '初始化 prompt',
     codeGenType varchar(64)                        null comment '代码生成类型（枚举）',
     deployKey   varchar(64)                        null comment '部署后的唯一标识',
+    priority    INT      DEFAULT 0 COMMENT '优先级',
     userId      BINARY(16)                         not null comment '创建用户 ID',
     editTime    datetime default CURRENT_TIMESTAMP not null comment '编辑时间',
     createTime  datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updateTime  datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
     isDelete    tinyint  default 0                 not null comment '是否删除',
     unique key uk_deploy (deployKey),
-    key idx_userId (userId)
+    key idx_userId (userId),
+    key idx_priority (priority)
 ) comment 'App' collate utf8mb4_unicode_ci;
 
 -- Tool Call 记录表
@@ -67,12 +69,12 @@ create table if not exists spring_ai_chat_memory
 -- 可观测性记录表
 create table if not exists observable_record
 (
-    id                bigint primary key auto_increment comment '主键',
-    conversation_id   varchar(36)                         null comment '会话 ID',
-    input_tokens      bigint                              null comment '输入 token 数',
-    output_tokens     bigint                              null comment '输出 token 数',
-    duration_ms       bigint                              null comment '耗时（毫秒）',
-    tool_call_count   int                                 null comment '工具调用次数',
-    timestamp         timestamp default CURRENT_TIMESTAMP not null comment '时间戳',
+    id              bigint primary key auto_increment comment '主键',
+    conversation_id varchar(36)                         null comment '会话 ID',
+    input_tokens    bigint                              null comment '输入 token 数',
+    output_tokens   bigint                              null comment '输出 token 数',
+    duration_ms     bigint                              null comment '耗时（毫秒）',
+    tool_call_count int                                 null comment '工具调用次数',
+    timestamp       timestamp default CURRENT_TIMESTAMP not null comment '时间戳',
     key idx_conversation_id (conversation_id)
 ) comment '可观测性记录' collate utf8mb4_unicode_ci;

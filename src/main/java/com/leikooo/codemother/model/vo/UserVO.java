@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 
 import java.nio.ByteBuffer;
 import java.util.Date;
+import java.util.Optional;
 
 /**
  * @author <a href="https://github.com/lieeew">leikooo</a>
@@ -68,9 +69,8 @@ public class UserVO {
     public static UserVO toVO(User user) {
         UserVO userVO = new UserVO();
         BeanUtil.copyProperties(user, userVO);
-        if (user.getId() != null) {
-            userVO.setId(UuidV7Generator.bytesToUuid(user.getId()));
-        }
+        Optional.ofNullable(user).map(User::getId)
+                .ifPresent(userId -> userVO.setId(UuidV7Generator.bytesToUuid(user.getId())));
         return userVO;
     }
 }

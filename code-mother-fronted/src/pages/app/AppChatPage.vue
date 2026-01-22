@@ -132,6 +132,18 @@
             />
             <div class="input-actions">
               <a-button
+                v-if="isGenerating"
+                type="primary"
+                danger
+                @click="cancelGeneration"
+              >
+                <template #icon>
+                  <CloseOutlined />
+                </template>
+                停止
+              </a-button>
+              <a-button
+                v-else
                 type="primary"
                 @click="sendMessage"
                 :loading="isGenerating"
@@ -215,6 +227,7 @@ import {useRoute, useRouter} from 'vue-router'
 import {message} from 'ant-design-vue'
 import {useLoginUserStore} from '@/stores/loginUser'
 import {
+  cancelGenCode,
   deleteApp as deleteAppApi,
   deployApp as deployAppApi,
   getAppVoById,
@@ -232,6 +245,7 @@ import {type ElementInfo, VisualEditor} from '@/utils/visualEditor'
 
 import {
   CloudUploadOutlined,
+  CloseOutlined,
   DownloadOutlined,
   EditOutlined,
   ExportOutlined,
@@ -496,6 +510,7 @@ const generateCode = async (userMessage: string, aiMessageIndex: number) => {
     eventSource = new EventSource(url, {
       withCredentials: true,
     })
+    eventSourceRef.value = eventSource
 
     let fullContent = ''
 
@@ -766,7 +781,33 @@ onMounted(() => {
 // 清理资源
 onUnmounted(() => {
   // EventSource 会在组件卸载时自动清理
+  if (isGenerating.value) {
+    cancelGeneration()
+  }
 })
+
+// 取消生成
+const cancelGeneration = async () => {
+  if (!appId.value) return
+
+  try {
+    const res = await cancelGenCode({ appId: appId.value })
+    if (res.data.code === 0 && res.data.data) {
+      message.success('已停止生成')
+    }
+  } catch (error) {
+    console.error('取消生成失败：', error)
+  } finally {
+    isGenerating.value = false
+    // 关闭 EventSource
+    if (eventSourceRef.value) {
+      eventSourceRef.value.close()
+      eventSourceRef.value = null
+    }
+  }
+}
+
+const eventSourceRef = ref<EventSource | null>(null)
 </script>
 
 <style scoped>

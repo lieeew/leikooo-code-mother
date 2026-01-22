@@ -15,4 +15,14 @@ import org.springframework.stereotype.Service;
 public class ObservableRecordServiceImpl extends ServiceImpl<ObservableRecordMapper, ObservableRecord>
         implements ObservableRecordService {
 
+    private final ObservableRecordMapper observableRecordMapper;
+
+    public ObservableRecordServiceImpl(ObservableRecordMapper observableRecordMapper) {
+        this.observableRecordMapper = observableRecordMapper;
+    }
+
+    @Override
+    public ObservableRecord getAppStatistics(String appId) {
+        return observableRecordMapper.getAppStatistics(appId);
+    }
 }

@@ -15,4 +15,8 @@ import org.springframework.stereotype.Service;
 public class ToolCallRecordServiceImpl extends ServiceImpl<ToolCallRecordMapper, ToolCallRecord>
         implements ToolCallRecordService {
 
+    @Override
+    public long countBySessionId(String sessionId) {
+        return this.lambdaQuery().eq(ToolCallRecord::getSessionId, sessionId).count();
+    }
 }

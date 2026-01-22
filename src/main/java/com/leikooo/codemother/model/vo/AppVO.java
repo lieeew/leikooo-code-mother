@@ -63,6 +63,21 @@ public class AppVO implements Serializable {
     private String userId;
 
     /**
+     * 生成 APP 输入 token
+     */
+    private Long totalInputTokens;
+
+    /**
+     * 生成 APP 输出 token
+     */
+    private Long totalOutputTokens;
+
+    /**
+     * 生成 APP 消耗时间
+     */
+    private Long totalConsumeTime;
+
+    /**
      * 创建用户信息
      */
     private UserVO user;

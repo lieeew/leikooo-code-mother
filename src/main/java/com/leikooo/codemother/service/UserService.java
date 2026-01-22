@@ -1,13 +1,13 @@
 package com.leikooo.codemother.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.leikooo.codemother.model.dto.request.user.SendCodeRequest;
-import com.leikooo.codemother.model.dto.request.user.UserLoginRequest;
-import com.leikooo.codemother.model.dto.request.user.UserRegisterRequest;
-import com.leikooo.codemother.model.dto.request.user.VerifyCodeRequest;
+import com.leikooo.codemother.model.dto.request.user.*;
 import com.leikooo.codemother.model.entity.User;
 import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.model.vo.VerifyCodeVO;
+
+import java.util.List;
 
 /**
  * @author leikooo
@@ -67,4 +67,18 @@ public interface UserService extends IService<User> {
      * @return 返回是否是管理员 true-管理员 false-非管理员
      */
     boolean isAdmin();
+
+    /**
+     * todo
+     * @param userQueryRequest
+     * @return
+     */
+    QueryWrapper<User> getQueryWrapper(UserQueryRequest userQueryRequest);
+
+    /**
+     * todo
+     * @param records
+     * @return
+     */
+    List<UserVO> getUserVOList(List<User> records);
 }

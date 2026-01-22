@@ -1,12 +1,12 @@
 
 package com.leikooo.codemother.service.impl;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.leikooo.codemother.ai.AiChatClient;
-import com.leikooo.codemother.ai.tools.ToolEventPublisher;
+import com.leikooo.codemother.ai.GenerationManager;
 import com.leikooo.codemother.exception.BusinessException;
 import com.leikooo.codemother.exception.ErrorCode;
 import com.leikooo.codemother.exception.ThrowUtils;
@@ -15,26 +15,26 @@ import com.leikooo.codemother.model.dto.AppQueryDto;
 import com.leikooo.codemother.model.dto.CreatAppDto;
 import com.leikooo.codemother.model.dto.GenAppDto;
 import com.leikooo.codemother.model.entity.App;
+import com.leikooo.codemother.model.entity.ObservableRecord;
+import com.leikooo.codemother.model.entity.User;
 import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
 import com.leikooo.codemother.model.vo.AppVO;
 import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.service.AppService;
+import com.leikooo.codemother.service.ObservableRecordService;
 import com.leikooo.codemother.service.UserService;
 import com.leikooo.codemother.utils.UuidV7Generator;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.ai.chat.client.ChatClientResponse;
-import org.springframework.ai.chat.messages.AbstractMessage;
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.Generation;
+import org.apache.ibatis.annotations.Lang;
+import org.aspectj.util.LangUtil;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-
-import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 /**
  * @author leikooo
@@ -48,10 +48,14 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
 
     private final AiChatClient aiChatClient;
     private final UserService userService;
+    private final GenerationManager generationManager;
+    private final ObservableRecordService observableRecordService;
 
-    public AppServiceImpl(AiChatClient aiChatClient, UserService userService) {
+    public AppServiceImpl(AiChatClient aiChatClient, UserService userService, GenerationManager generationManager, ObservableRecordService observableRecordService) {
         this.aiChatClient = aiChatClient;
         this.userService = userService;
+        this.generationManager = generationManager;
+        this.observableRecordService = observableRecordService;
     }
 
     @Override
@@ -73,11 +77,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
 
     @Override
     public Flux<String> genAppCode(GenAppDto genAppDto) {
-        String appId = genAppDto.getAppId();
         GenAppDto updateGenApp = getAppCodeGenEnum(genAppDto);
-        Flux<ChatClientResponse> chatClientResponseFlux = aiChatClient.generateCode(updateGenApp);
-        return chatClientResponseFlux
-                .map(response -> Optional.ofNullable(response.chatResponse()).map(ChatResponse::getResult).map(Generation::getOutput).map(AbstractMessage::getText).orElse(""));
+        String appId = updateGenApp.getAppId();
+        return aiChatClient.generateCode(updateGenApp)
+                .doOnSubscribe(subscription -> generationManager.register(appId, subscription::cancel))
+                .doFinally(signalType -> generationManager.cancel(appId));
     }
 
     @Override
@@ -100,9 +104,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
                 """, initPrompt, errorAnalysis);
 
         GenAppDto fixDto = new GenAppDto(fixPrompt, appId, CodeGenTypeEnum.getEnumByValue(app.getCodeGenType()));
-        Flux<ChatClientResponse> chatClientResponseFlux = aiChatClient.generateCode(fixDto);
-        return chatClientResponseFlux
-                .map(response -> Optional.ofNullable(response.chatResponse()).map(ChatResponse::getResult).map(Generation::getOutput).map(AbstractMessage::getText).orElse(""));
+        return aiChatClient.generateCode(fixDto)
+                .doOnSubscribe(subscription -> generationManager.register(appId, () -> subscription.cancel()))
+                .doFinally(signalType -> generationManager.cancel(appId));
     }
 
     private GenAppDto getAppCodeGenEnum(GenAppDto genAppDto) {
@@ -126,7 +130,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         UserVO userLogin = userService.getUserLogin();
         App app = this.getById(id);
         ThrowUtils.throwIf(Objects.isNull(app), ErrorCode.PARAMS_ERROR);
-        return AppVO.toVO(app, userLogin);
+        AppVO appVO = AppVO.toVO(app, userLogin);
+        getAppStatistics(appVO);
+        return appVO;
     }
 
     @Override
@@ -141,13 +147,15 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         String codeGenType = appQueryDto.getCodeGenType();
         String deployKey = appQueryDto.getDeployKey();
         String userId = appQueryDto.getUserId();
+        Integer priority = appQueryDto.getPriority();
         String sortField = appQueryDto.getSortField();
         String sortOrder = appQueryDto.getSortOrder();
         queryWrapper.eq(Objects.nonNull(id), "id", id)
                 .like(StringUtils.isNotBlank(appName), "appName", appName)
                 .like(StringUtils.isNotBlank(initPrompt), "initPrompt", initPrompt)
                 .eq(StringUtils.isNotBlank(codeGenType), "codeGenType", codeGenType)
-                .eq(StringUtils.isNotBlank(deployKey), "deployKey", deployKey);
+                .eq(StringUtils.isNotBlank(deployKey), "deployKey", deployKey)
+                .eq(Objects.nonNull(priority), "priority", priority);
         if (StringUtils.isNotBlank(userId)) {
             queryWrapper.eq("userId", UuidV7Generator.stringToBytes(userId));
         }
@@ -160,10 +168,31 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
     }
 
     @Override
-    public List<AppVO> getAppVOList(Page<App> appPage) {
-        UserVO userVO = userService.getUserLogin();
-        return appPage.getRecords().stream()
-                .map(app -> AppVO.toVO(app, userVO)).toList();
+    public List<AppVO> getAppVOList(List<App> appPage) {
+        if (CollUtil.isEmpty(appPage)) {
+            return List.of();
+        }
+        return appPage.stream()
+                .map(app -> {
+                    byte[] userId = app.getUserId();
+                    User user = userService.getById(userId);
+                    return AppVO.toVO(app, UserVO.toVO(user));
+                })
+                .peek(this::getAppStatistics)
+                .toList();
+    }
+
+    private void getAppStatistics(AppVO appVO) {
+        ObservableRecord appStatistics = observableRecordService.getAppStatistics(appVO.getId());
+        if (Objects.nonNull(appStatistics)) {
+            Long inputTokens = Optional.of(appStatistics).map(ObservableRecord::getInputTokens).orElse(0L);
+            Long outputTokens = Optional.of(appStatistics).map(ObservableRecord::getOutputTokens).orElse(0L);
+            Long consumeTime = Optional.of(appStatistics).map(ObservableRecord::getDurationMs).orElse(0L);
+
+            appVO.setTotalInputTokens(inputTokens);
+            appVO.setTotalOutputTokens(outputTokens);
+            appVO.setTotalConsumeTime(consumeTime);
+        }
     }
 
 }

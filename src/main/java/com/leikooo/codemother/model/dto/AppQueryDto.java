@@ -68,6 +68,17 @@ public class AppQueryDto extends PageRequest implements Serializable {
      */
     private String userId;
 
+    /**
+     * 优先级
+     */
+    private Integer priority;
+
+    public static AppQueryDto toDto(AppQueryRequest appQueryRequest) {
+        AppQueryDto appQueryDto = new AppQueryDto();
+        BeanUtil.copyProperties(appQueryRequest, appQueryDto);
+        return appQueryDto;
+    }
+
     public static AppQueryDto toDto(AppQueryRequest appQueryRequest, UserVO userVO) {
         AppQueryDto appQueryDto = new AppQueryDto();
         BeanUtil.copyProperties(appQueryRequest, appQueryDto);

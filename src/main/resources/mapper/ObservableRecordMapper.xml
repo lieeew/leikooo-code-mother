@@ -9,7 +9,6 @@
             <result property="conversationId" column="conversation_id" />
             <result property="inputTokens" column="input_tokens" />
             <result property="outputTokens" column="output_tokens" />
-            <result property="completionTokens" column="completion_tokens" />
             <result property="durationMs" column="duration_ms" />
             <result property="toolCallCount" column="tool_call_count" />
             <result property="timestamp" column="timestamp" />
@@ -19,4 +18,14 @@
         id,conversation_id,input_tokens,output_tokens,completion_tokens,duration_ms,
         tool_call_count,timestamp
     </sql>
+
+    <select id="getAppStatistics" resultType="com.leikooo.codemother.model.entity.ObservableRecord">
+        select
+            SUM(input_tokens) as inputTokens,
+            SUM(output_tokens) as outputTokens,
+            SUM(duration_ms) as durationMs,
+            SUM(tool_call_count) as toolCallCount
+        from observable_record
+        where conversation_id = #{appId};
+    </select>
 </mapper>

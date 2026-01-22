@@ -16,6 +16,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.SignalType;
 
 import java.io.File;
 import java.util.Objects;
@@ -49,6 +50,10 @@ public class BuildAdvisor implements CallAdvisor, StreamAdvisor {
 
         return streamAdvisorChain.nextStream(chatClientRequest)
                 .doFinally(signalType -> {
+                    if (!SignalType.ON_COMPLETE.equals(signalType)) {
+                        log.info("[BuildAdvisor] Stream terminated early, signalType={}, appId={}", signalType, appId);
+                        return;
+                    }
                     try {
                         String codeGenType = app.getCodeGenType();
                         CodeGenTypeEnum enumByValue = CodeGenTypeEnum.getEnumByValue(codeGenType);
@@ -83,13 +88,13 @@ public class BuildAdvisor implements CallAdvisor, StreamAdvisor {
             String fixPrompt = buildFixPrompt(app, errorLog);
             Flux<String> fixFlux = appService.fixBuildError(appId, fixPrompt);
 
-            fixFlux.doOnNext(fixedCode -> {
+            fixFlux.doFinally(fixedCode -> {
                 log.info("[BuildAdvisor] Fix generated for app: {}, retrying build...", appId);
                 VueBuildUtils.BuildResult retryResult = VueBuildUtils.buildVueProject(ResourcePathConstant.ROOT_PATH + File.separator + appId);
                 BuildResultEnum retryResultEnum = BuildResultEnum.fromExitCode(retryResult.exitCode());
 
                 if (retryResultEnum == BuildResultEnum.ERROR) {
-                    handleBuildResult(app, retryResult);
+                    log.info("[BuildAdvisor] Build error after fix for app: {}", appId);
                 } else {
                     log.info("[BuildAdvisor] Build succeeded after fix for app: {}", appId);
                 }

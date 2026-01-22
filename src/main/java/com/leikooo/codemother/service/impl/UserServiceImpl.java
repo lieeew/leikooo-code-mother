@@ -3,15 +3,15 @@ package com.leikooo.codemother.service.impl;
 import cn.dev33.satoken.stp.StpUtil;
 import cn.dev33.satoken.stp.parameter.SaLoginParameter;
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.RandomUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.leikooo.codemother.exception.BusinessException;
+import com.leikooo.codemother.exception.ErrorCode;
 import com.leikooo.codemother.exception.ThrowUtils;
 import com.leikooo.codemother.mapper.UserMapper;
-import com.leikooo.codemother.model.dto.request.user.SendCodeRequest;
-import com.leikooo.codemother.model.dto.request.user.UserLoginRequest;
-import com.leikooo.codemother.model.dto.request.user.UserRegisterRequest;
-import com.leikooo.codemother.model.dto.request.user.VerifyCodeRequest;
+import com.leikooo.codemother.model.dto.request.user.*;
 import com.leikooo.codemother.model.entity.User;
 import com.leikooo.codemother.model.enums.UserRoleEnum;
 import com.leikooo.codemother.model.vo.UserVO;
@@ -26,6 +26,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -191,6 +192,43 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         String userRole = userLogin.getUserRole();
         UserRoleEnum userRoleEnum = UserRoleEnum.getEnumByValue(userRole);
         return UserRoleEnum.ADMIN.equals(userRoleEnum);
+    }
+
+    @Override
+    public QueryWrapper<User> getQueryWrapper(UserQueryRequest userQueryRequest) {
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        if (userQueryRequest == null) {
+            return queryWrapper;
+        }
+        Long id = userQueryRequest.getId();
+        String userAccount = userQueryRequest.getUserAccount();
+        String userName = userQueryRequest.getUserName();
+        String userProfile = userQueryRequest.getUserProfile();
+        String userRole = userQueryRequest.getUserRole();
+        String sortField = userQueryRequest.getSortField();
+        String sortOrder = userQueryRequest.getSortOrder();
+
+        queryWrapper.eq(Objects.nonNull(id), "id", id)
+                .eq(StringUtils.isNotBlank(userRole), "userRole", userRole)
+                .like(StringUtils.isNotBlank(userAccount), "userAccount", userAccount)
+                .like(StringUtils.isNotBlank(userName), "userName", userName)
+                .like(StringUtils.isNotBlank(userProfile), "userProfile", userProfile);
+
+        if (StringUtils.isNotBlank(sortField)) {
+            queryWrapper.orderBy(true, "ascend".equals(sortOrder), sortField);
+        } else {
+            queryWrapper.orderBy(true, false, "createTime");
+        }
+
+        return queryWrapper;
+    }
+
+    @Override
+    public List<UserVO> getUserVOList(List<User> records) {
+        if (CollUtil.isEmpty(records)) {
+            return List.of();
+        }
+        return records.stream().map(UserVO::toVO).toList();
     }
 
 }
