@@ -231,6 +231,37 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         return records.stream().map(UserVO::toVO).toList();
     }
 
+    @Override
+    public User getUserByUerId(String userId) {
+        return this.lambdaQuery()
+                .eq(User::getId, UuidV7Generator.stringToBytes(userId))
+                .one();
+    }
+
+    @Override
+    public Boolean removeByUserId(String userId) {
+        if (StringUtils.isBlank(userId)) {
+            return false;
+        }
+        return this.lambdaUpdate()
+                .eq(User::getId, UuidV7Generator.stringToBytes(userId))
+                .remove();
+    }
+
+    @Override
+    public Boolean updateUserById(UserUpdateRequest userUpdateRequest) {
+        String userId = userUpdateRequest.getUserId();
+        if (StringUtils.isBlank(userId)) {
+            return false;
+        }
+        User user = this.getUserByUerId(userId);
+        if (user == null) {
+            return false;
+        }
+        BeanUtil.copyProperties(userUpdateRequest, user, "id");
+        return this.updateById(user);
+    }
+
 }
 
 

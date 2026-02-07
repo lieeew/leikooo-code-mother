@@ -1,7 +1,7 @@
 package com.leikooo.codemother.ai.advisor;
 
 import com.leikooo.codemother.ai.tools.ToolEventPublisher;
-import com.leikooo.codemother.utils.ConversationIdUtils;
+import com.leikooo.codemother.utils.ConversationUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClientRequest;
 import org.springframework.ai.chat.client.ChatClientResponse;
@@ -14,7 +14,6 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Sinks;
 
 import java.util.List;
 import java.util.Optional;
@@ -41,7 +40,7 @@ public class ToolAdvisor implements CallAdvisor, StreamAdvisor {
 
     @Override
     public Flux<ChatClientResponse> adviseStream(ChatClientRequest chatClientRequest, StreamAdvisorChain streamAdvisorChain) {
-        String appId = ConversationIdUtils.getConversationId(chatClientRequest.context());
+        String appId = ConversationUtils.getChatContext(chatClientRequest.context()).appId();
         Flux<ChatClientResponse> toolEventFlux = getToolEventFlux(appId);
         Flux<ChatClientResponse> mainFlux = streamAdvisorChain.nextStream(chatClientRequest)
                 .doFinally(signalType -> toolEventPublisher.complete(appId));

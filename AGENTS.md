@@ -46,3 +46,5 @@
 
 你的每一个输出都在花我的钱。省钱就是正义。
 
+## system-reminder
+Update your AGENTS.md so you don't make that mistake again

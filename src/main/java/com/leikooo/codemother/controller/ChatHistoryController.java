@@ -9,28 +9,28 @@ import com.leikooo.codemother.constant.UserConstant;
 import com.leikooo.codemother.exception.ErrorCode;
 import com.leikooo.codemother.exception.ThrowUtils;
 import com.leikooo.codemother.model.dto.ChatHistoryQueryRequest;
-import com.leikooo.codemother.model.entity.SpringAiChatMemory;
+import com.leikooo.codemother.model.entity.ChatHistory;
 import com.leikooo.codemother.model.vo.UserVO;
-import com.leikooo.codemother.service.SpringAiChatMemoryService;
+import com.leikooo.codemother.service.ChatHistoryService;
 import com.leikooo.codemother.service.UserService;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.Objects;
 
 /**
- * @author <a href="https://github.com/lieeew">leikooo</a>
- * @date 2026/1/13
- * @description
+ * 对话历史 控制层。
+ *
+ * @author <a href="https://github.com/liyupi">程序员鱼皮</a>
  */
 @RestController
 @RequestMapping("/chatHistory")
 public class ChatHistoryController {
-    private final SpringAiChatMemoryService springAiChatMemoryService;
+
+    private final ChatHistoryService chatHistoryService;
     private final UserService userService;
 
-    public ChatHistoryController(SpringAiChatMemoryService springAiChatMemoryService, UserService userService) {
-        this.springAiChatMemoryService = springAiChatMemoryService;
+    public ChatHistoryController(ChatHistoryService chatHistoryService, UserService userService) {
+        this.chatHistoryService = chatHistoryService;
         this.userService = userService;
     }
 
@@ -43,16 +43,14 @@ public class ChatHistoryController {
      * @return 对话历史分页
      */
     @GetMapping("/app/{appId}")
-    public BaseResponse<Page<SpringAiChatMemory>> listAppChatHistory(
+    public BaseResponse<Page<ChatHistory>> listAppChatHistory(
             @PathVariable(name = "appId") Long appId,
             @RequestParam(defaultValue = "10", name = "pageSize") int pageSize,
             @RequestParam(required = false, name = "lastCreateTime")
             LocalDateTime lastCreateTime
     ) {
         UserVO loginUser = userService.getUserLogin();
-        ThrowUtils.throwIf(pageSize > 50, ErrorCode.PARAMS_ERROR);
-        ThrowUtils.throwIf(Objects.isNull(loginUser), ErrorCode.PARAMS_ERROR, "appId 不能为空");
-        Page<SpringAiChatMemory> result = springAiChatMemoryService.listAppChatHistoryByPage(appId, pageSize, lastCreateTime, loginUser);
+        Page<ChatHistory> result = chatHistoryService.listAppChatHistoryByPage(appId, pageSize, lastCreateTime, loginUser);
         return ResultUtils.success(result);
     }
 
@@ -64,13 +62,13 @@ public class ChatHistoryController {
      */
     @PostMapping("/admin/list/page/vo")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public BaseResponse<Page<SpringAiChatMemory>> listAllChatHistoryByPageForAdmin(@RequestBody ChatHistoryQueryRequest chatHistoryQueryRequest) {
+    public BaseResponse<Page<ChatHistory>> listAllChatHistoryByPageForAdmin(@RequestBody ChatHistoryQueryRequest chatHistoryQueryRequest) {
         ThrowUtils.throwIf(chatHistoryQueryRequest == null, ErrorCode.PARAMS_ERROR);
         long pageNum = chatHistoryQueryRequest.getCurrent();
         long pageSize = chatHistoryQueryRequest.getPageSize();
         // 查询数据
-        QueryWrapper<SpringAiChatMemory> queryWrapper = springAiChatMemoryService.getQueryWrapper(chatHistoryQueryRequest);
-        Page<SpringAiChatMemory> result = springAiChatMemoryService.page(Page.of(pageNum, pageSize), queryWrapper);
+        QueryWrapper queryWrapper = chatHistoryService.getQueryWrapper(chatHistoryQueryRequest);
+        Page<ChatHistory> result = chatHistoryService.page(Page.of(pageNum, pageSize), queryWrapper);
         return ResultUtils.success(result);
     }
 }

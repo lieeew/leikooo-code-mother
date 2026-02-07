@@ -1,7 +1,6 @@
 package com.leikooo.codemother.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.leikooo.codemother.model.dto.AppQueryDto;
 import com.leikooo.codemother.model.dto.CreatAppDto;
@@ -47,13 +46,6 @@ public interface AppService extends IService<App> {
      */
     QueryWrapper<App> getQueryWrapper(AppQueryDto appQueryDto);
 
-    /**
-     * 修复构建错误
-     * @param appId appId
-     * @param errorAnalysis 错误分析结果
-     * @return 修复后的代码流
-     */
-    Flux<String> fixBuildError(String appId, String errorAnalysis);
 
     /**
      *  todo

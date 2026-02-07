@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.leikooo.codemother.mapper.AppVersionMapper">
+
+    <resultMap id="BaseResultMap" type="com.leikooo.codemother.model.entity.AppVersion">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="appId" column="appId" jdbcType="BIGINT"/>
+            <result property="versionNum" column="versionNum" jdbcType="INTEGER"/>
+            <result property="fileUrl" column="fileUrl" jdbcType="VARCHAR"/>
+            <result property="fileCount" column="fileCount" jdbcType="INTEGER"/>
+            <result property="fileSize" column="fileSize" jdbcType="BIGINT"/>
+            <result property="createTime" column="createTime" jdbcType="TIMESTAMP"/>
+            <result property="isDelete" column="isDelete" jdbcType="TINYINT"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,appId,versionNum,fileUrl,fileCount,fileSize,
+        createTime,isDelete,userId
+    </sql>
+</mapper>

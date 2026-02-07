@@ -1,8 +1,9 @@
 package com.leikooo.codemother.ai.advisor;
 
-import com.leikooo.codemother.model.entity.SpringAiChatMemory;
-import com.leikooo.codemother.service.SpringAiChatMemoryService;
-import com.leikooo.codemother.utils.ConversationIdUtils;
+import com.leikooo.codemother.model.dto.ChatContext;
+import com.leikooo.codemother.model.enums.ChatHistoryMessageTypeEnum;
+import com.leikooo.codemother.service.ChatHistoryService;
+import com.leikooo.codemother.utils.ConversationUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClientRequest;
 import org.springframework.ai.chat.client.ChatClientResponse;
@@ -11,16 +12,13 @@ import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisor;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisorChain;
 import org.springframework.ai.chat.messages.AbstractMessage;
-import org.springframework.ai.chat.messages.MessageType;
-import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.SignalType;
 
-import java.util.Date;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -31,10 +29,11 @@ import java.util.stream.Collectors;
 @Slf4j
 @Component
 public class MessageAggregatorAdvisor implements CallAdvisor, StreamAdvisor {
-    private final SpringAiChatMemoryService springAiChatMemoryService;
 
-    public MessageAggregatorAdvisor(@Lazy SpringAiChatMemoryService springAiChatMemoryService) {
-        this.springAiChatMemoryService = springAiChatMemoryService;
+    private final ChatHistoryService chatHistoryService;
+
+    public MessageAggregatorAdvisor(@Lazy ChatHistoryService chatHistoryService) {
+        this.chatHistoryService = chatHistoryService;
     }
 
     @Override
@@ -44,7 +43,6 @@ public class MessageAggregatorAdvisor implements CallAdvisor, StreamAdvisor {
 
     @Override
     public Flux<ChatClientResponse> adviseStream(ChatClientRequest chatClientRequest, StreamAdvisorChain streamAdvisorChain) {
-        String appId = ConversationIdUtils.getConversationId(chatClientRequest.context());
         StringBuilder resultCollector = new StringBuilder();
 
         return streamAdvisorChain.nextStream(chatClientRequest)
@@ -56,42 +54,13 @@ public class MessageAggregatorAdvisor implements CallAdvisor, StreamAdvisor {
                             .collect(Collectors.joining());
                     resultCollector.append(text);
                 })
-                .doFinally(signalType -> updateUpdatedMessage(appId, resultCollector.toString()));
+                .doFinally(signalType -> updateUpdatedMessage(ConversationUtils.getChatContext(chatClientRequest.context()), resultCollector.toString()));
     }
 
-    private Optional<String> extractText(ChatClientResponse response) {
-        return Optional.ofNullable(response.chatResponse())
-                .map(ChatResponse::getResult)
-                .map(Generation::getOutput)
-                .map(AbstractMessage::getText);
-    }
-
-    private void updateUpdatedMessage(String appId, String content) {
-        try {
-            SpringAiChatMemory springAiChatMemory = springAiChatMemoryService.lambdaQuery()
-                    .eq(SpringAiChatMemory::getConversationId, appId)
-                    .eq(SpringAiChatMemory::getType, MessageType.ASSISTANT)
-                    .orderByDesc(SpringAiChatMemory::getTimestamp)
-                    .last("LIMIT 1")
-                    .one();
-            if (Objects.isNull(springAiChatMemory)) {
-                SpringAiChatMemory newRecord = SpringAiChatMemory.builder()
-                        .conversationId(appId)
-                        .type(MessageType.ASSISTANT)
-                        .content(content)
-                        .timestamp(new Date())
-                        .build();
-                springAiChatMemoryService.save(newRecord);
-            } else {
-                springAiChatMemoryService.lambdaUpdate()
-                        .eq(SpringAiChatMemory::getConversationId, appId)
-                        .eq(SpringAiChatMemory::getType, MessageType.ASSISTANT)
-                        .set(SpringAiChatMemory::getContent, content)
-                        .update();
-            }
-        } catch (Exception e) {
-            log.error("保存包含工具调用的完整记录报错 {}", e);
-        }
+    private void updateUpdatedMessage(ChatContext chatContext, String content) {
+        String appId = chatContext.appId();
+        String userId = chatContext.userId();
+        chatHistoryService.addChatMessage(appId, content, ChatHistoryMessageTypeEnum.AI.getValue(), userId);
     }
 
     @Override

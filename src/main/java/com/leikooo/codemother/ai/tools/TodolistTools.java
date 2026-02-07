@@ -2,7 +2,7 @@ package com.leikooo.codemother.ai.tools;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.leikooo.codemother.utils.ConversationIdUtils;
+import com.leikooo.codemother.utils.ConversationUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
@@ -38,7 +38,7 @@ public class TodolistTools extends BaseTools {
             String todoContent,
             ToolContext toolContext
     ) {
-        String conversationId = ConversationIdUtils.getConversationId(toolContext);
+        String conversationId = ConversationUtils.getToolsContext(toolContext).appId();
         if (StringUtils.isBlank(todoContent)) {
             TODOLIST_CACHE.invalidate(conversationId);
             return "Todo list cleared.";
@@ -52,7 +52,7 @@ public class TodolistTools extends BaseTools {
             "Returns an empty message if no todo list exists yet."
     )
     public String todoRead(ToolContext toolContext) {
-        String conversationId = ConversationIdUtils.getConversationId(toolContext);
+        String conversationId = ConversationUtils.getToolsContext(toolContext).appId();
         String todoContent = TODOLIST_CACHE.getIfPresent(conversationId);
         if (StringUtils.isBlank(todoContent)) {
             return "No todo list for this conversation.";

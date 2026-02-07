@@ -4,7 +4,7 @@ import com.leikooo.codemother.ai.tools.ToolEventPublisher;
 import com.leikooo.codemother.model.entity.ToolCallRecord;
 import com.leikooo.codemother.model.enums.ToolCallTypeEnum;
 import com.leikooo.codemother.service.ToolCallRecordService;
-import com.leikooo.codemother.utils.ConversationIdUtils;
+import com.leikooo.codemother.utils.ConversationUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
@@ -67,7 +67,7 @@ public class ToolContextAspect {
         Message message = context.getToolCallHistory().getLast();
         AssistantMessage.ToolCall toolCallInfo = ((AssistantMessage) message).getToolCalls().getLast();
         String toolCallId = toolCallInfo.id();
-        String sessionId = ConversationIdUtils.getConversationId(context);
+        String sessionId = ConversationUtils.getToolsContext(context).appId();
         if (isBefore) {
             toolEventPublisher.publishToolCall(sessionId, className, methodName, toolCallId);
             saveToolRecord(sessionId, toolCallId, className, methodName, ToolCallTypeEnum.CALL, null);

@@ -3,11 +3,11 @@ package com.leikooo.codemother.ai;
 import com.leikooo.codemother.ai.advisor.*;
 import com.leikooo.codemother.ai.tools.FileTools;
 import com.leikooo.codemother.ai.tools.TodolistTools;
+import com.leikooo.codemother.model.dto.ChatContext;
 import com.leikooo.codemother.model.dto.GenAppDto;
-import com.leikooo.codemother.model.enums.BuildResultEnum;
+import com.leikooo.codemother.model.dto.ToolsContext;
 import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
 import com.leikooo.codemother.service.ObservableRecordService;
-import com.leikooo.codemother.service.SpringAiChatMemoryService;
 import com.leikooo.codemother.service.ToolCallRecordService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -15,13 +15,13 @@ import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.converter.ThinkingTagCleaner;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
 import java.util.Map;
 
+import static com.leikooo.codemother.constant.AppConstant.GEN_APP_INFO;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
@@ -34,12 +34,16 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 public class AiChatClient {
     private final ChatClient chatClient;
     private JdbcChatMemoryRepository chatMemoryRepository;
+    private final ChatModel openAiChatModel;
+    private final FileTools fileTools;
 
-    public AiChatClient(ChatModel openAiChatModel, TodolistTools todolistTools, FileTools fileTools, ToolAdvisor toolAdvisor, MessageAggregatorAdvisor messageAggregatorAdvisor, BuildAdvisor buildAdvisor, ObservableRecordService observableRecordService, ToolCallRecordService toolCallRecordService, @Lazy SpringAiChatMemoryService springAiChatMemoryService, JdbcChatMemoryRepository chatMemoryRepository) {
+    public AiChatClient(ChatModel openAiChatModel, TodolistTools todolistTools, FileTools fileTools, ToolAdvisor toolAdvisor, MessageAggregatorAdvisor messageAggregatorAdvisor, BuildAdvisor buildAdvisor, ObservableRecordService observableRecordService, ToolCallRecordService toolCallRecordService, JdbcChatMemoryRepository chatMemoryRepository, VersionAdvisor versionAdvisor) {
         this.chatMemoryRepository = chatMemoryRepository;
+        this.openAiChatModel = openAiChatModel;
+        this.fileTools = fileTools;
         this.chatClient = ChatClient
                 .builder(openAiChatModel)
-                .defaultAdvisors(buildAdvisor, toolAdvisor, messageAggregatorAdvisor, buildAdvisor,
+                .defaultAdvisors(buildAdvisor, toolAdvisor, messageAggregatorAdvisor, versionAdvisor,
                         new SystemMessageFirstAdvisor(), new LogAdvisor(),
                         new ObservableAdvisor(observableRecordService, toolCallRecordService))
                 .defaultTools(todolistTools, fileTools)
@@ -49,12 +53,16 @@ public class AiChatClient {
     public Flux<String> generateCode(GenAppDto genAppDto) {
         String message = genAppDto.getMessage();
         String appId = genAppDto.getAppId();
+        String userId = genAppDto.getUserLogin().getId();
         CodeGenTypeEnum codeGenTypeEnum = genAppDto.getCodeGenTypeEnum();
         ClassPathResource classPathResource = getClassPathResource(codeGenTypeEnum);
         return chatClient.prompt()
                 .tools()
                 .user(message)
-                .advisors(advisorSpec -> advisorSpec.param(CONVERSATION_ID, appId))
+                .advisors(advisorSpec -> {
+                    advisorSpec.param(GEN_APP_INFO, new ChatContext(appId, userId));
+                    advisorSpec.param(CONVERSATION_ID, appId);
+                })
                 .advisors(MessageChatMemoryAdvisor
                         .builder(MessageWindowChatMemory.builder()
                                 .chatMemoryRepository(chatMemoryRepository)
@@ -62,7 +70,7 @@ public class AiChatClient {
                                 .build())
                         .build())
                 .system(classPathResource, UTF_8)
-                .toolContext(Map.of(CONVERSATION_ID, appId))
+                .toolContext(Map.of(CONVERSATION_ID, appId, GEN_APP_INFO, new ToolsContext(appId, userId)))
                 .stream().content();
     }
 
@@ -83,48 +91,49 @@ public class AiChatClient {
         return classPathResource;
     }
 
-    public String generateCodeFlux(String message) {
-        return chatClient.prompt(message)
+    /**
+     * 用来修复代码
+     * @param genAppDto genAppDto
+     * @return
+     */
+    public Flux<String> fixCode(GenAppDto genAppDto) {
+        String userId = genAppDto.getUserLogin().getId();
+        String appId = genAppDto.getAppId();
+        return ChatClient.builder(openAiChatModel)
+                .build().prompt()
+                .user(genAppDto.getMessage())
+                .system(new ClassPathResource("prompt/build-advisor-system-prompt.md"), UTF_8)
                 .advisors(MessageChatMemoryAdvisor
                         .builder(MessageWindowChatMemory.builder()
-                                .chatMemoryRepository(chatMemoryRepository)
                                 .maxMessages(100)
                                 .build())
                         .build())
-                .call().content();
+                .tools(fileTools)
+                .toolContext(Map.of(CONVERSATION_ID, appId, GEN_APP_INFO, new ToolsContext(appId, userId)))
+                .stream().content();
     }
 
-    public BuildResultEnum checkBuildResult(String userMessage, Long appId) {
-        String rawResponse = chatClient.prompt(userMessage)
-                .system(new ClassPathResource("prompt/build-error-analysis-system-prompt.md"), UTF_8)
-                .advisors(advisorSpec -> advisorSpec.param(CONVERSATION_ID, appId))
-                .advisors(MessageChatMemoryAdvisor
-                        .builder(MessageWindowChatMemory.builder()
-                                .maxMessages(100)
-                                .build())
-                        .build())
-                .call().content();
-        ThinkingTagCleaner thinkingTagCleaner = new ThinkingTagCleaner();
-        String normalizedResponse = normalizeEnumValue(thinkingTagCleaner.clean(rawResponse));
-        return BuildResultEnum.fromDesc(normalizedResponse);
-    }
 
     /**
      * 根据提示词生成 CodeGenTypeEnum
      *
      * @param prompt 用户提示词
-     * @param appId appId
+     * @param appId  appId
+     * @param userId userId
      * @return CodeGenTypeEnum
      */
-    public CodeGenTypeEnum selectGenTypeEnum(String prompt, Long appId) {
+    public CodeGenTypeEnum selectGenTypeEnum(String prompt, Long appId, String userId) {
         String rawResponse = chatClient.prompt(prompt)
                 .system(new ClassPathResource("prompt/codegen-routing-system-prompt.md"), UTF_8)
-                .advisors(advisorSpec -> advisorSpec.param(CONVERSATION_ID, appId))
                 .advisors(MessageChatMemoryAdvisor
                         .builder(MessageWindowChatMemory.builder()
                                 .maxMessages(100)
                                 .build())
                         .build())
+                .advisors(advisorSpec -> {
+                    advisorSpec.param(GEN_APP_INFO, new ChatContext(appId.toString(), userId));
+                    advisorSpec.param(CONVERSATION_ID, appId);
+                })
                 .call().content();
         ThinkingTagCleaner thinkingTagCleaner = new ThinkingTagCleaner();
         String normalizedResponse = normalizeEnumValue(thinkingTagCleaner.clean(rawResponse));

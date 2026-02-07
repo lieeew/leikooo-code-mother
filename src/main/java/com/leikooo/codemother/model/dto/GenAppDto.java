@@ -1,8 +1,7 @@
 package com.leikooo.codemother.model.dto;
 
 import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import com.leikooo.codemother.model.vo.UserVO;
 import lombok.Getter;
 
 /**
@@ -27,6 +26,24 @@ public class GenAppDto {
      * 生成代码的类型
      */
     private CodeGenTypeEnum codeGenTypeEnum;
+
+    /**
+     * userLogin
+     */
+    private UserVO userLogin;
+
+    public GenAppDto(String message, String appId, CodeGenTypeEnum codeGenTypeEnum, UserVO userLogin) {
+        this.message = message;
+        this.appId = appId;
+        this.codeGenTypeEnum = codeGenTypeEnum;
+        this.userLogin = userLogin;
+    }
+
+    public GenAppDto(String message, String appId, UserVO userLogin) {
+        this.message = message;
+        this.appId = appId;
+        this.userLogin = userLogin;
+    }
 
     public GenAppDto(String message, String appId) {
         this.message = message;

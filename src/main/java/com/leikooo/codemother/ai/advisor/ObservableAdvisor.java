@@ -6,15 +6,15 @@ import com.knuddels.jtokkit.api.EncodingType;
 import com.leikooo.codemother.model.entity.ObservableRecord;
 import com.leikooo.codemother.service.ObservableRecordService;
 import com.leikooo.codemother.service.ToolCallRecordService;
-import com.leikooo.codemother.utils.ConversationIdUtils;
+import com.leikooo.codemother.utils.ConversationUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClientRequest;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.api.*;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
-import org.springframework.context.annotation.Lazy;
 import reactor.core.publisher.Flux;
 
 import java.time.Instant;
@@ -53,7 +53,7 @@ public class ObservableAdvisor implements CallAdvisor, StreamAdvisor {
     @Override
     public Flux<ChatClientResponse> adviseStream(ChatClientRequest request, StreamAdvisorChain chain) {
         long startTime = System.currentTimeMillis();
-        String conversationId = ConversationIdUtils.getConversationId(request.context());
+        String conversationId = ConversationUtils.getChatContext(request.context()).appId();
         long startToolCallCount = getCurrentToolCallCount(conversationId);
 
         StringBuilder contentAccumulator = new StringBuilder();
@@ -62,11 +62,19 @@ public class ObservableAdvisor implements CallAdvisor, StreamAdvisor {
 
         return chain.nextStream(request)
                 .doOnNext(response -> {
-                    Generation result = response.chatResponse().getResult();
-                    if (result.getOutput().getText() != null) {
-                        contentAccumulator.append(result.getOutput().getText());
+                    if (response == null || response.chatResponse() == null) {
+                        return;
                     }
-                    Usage usage = response.chatResponse().getMetadata().getUsage();
+                    ChatResponse chatResponse = response.chatResponse();
+                    Generation result = chatResponse.getResult();
+                    if (result == null) {
+                        return;
+                    }
+                    AssistantMessage output = result.getOutput();
+                    if (output != null && output.getText() != null) {
+                        contentAccumulator.append(output.getText());
+                    }
+                    Usage usage = chatResponse.getMetadata().getUsage();
                     if (usage != null) {
                         promptTokens.set(usage.getPromptTokens());
                         completionTokens.set(usage.getCompletionTokens());
@@ -97,7 +105,7 @@ public class ObservableAdvisor implements CallAdvisor, StreamAdvisor {
 
     private void recordUsage(ChatClientRequest request, ChatResponse response, long startTime) {
         Usage usage = response.getMetadata().getUsage();
-        String conversationId = ConversationIdUtils.getConversationId(request.context());
+        String conversationId = ConversationUtils.getChatContext(request.context()).appId();
         long startToolCallCount = getCurrentToolCallCount(conversationId);
 
         long pTokens;

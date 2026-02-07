@@ -81,4 +81,25 @@ public interface UserService extends IService<User> {
      * @return
      */
     List<UserVO> getUserVOList(List<User> records);
+
+    /**
+     * 获取 User 信息
+     * @param userId userId
+     * @return User
+     */
+    User getUserByUerId(String userId);
+
+    /**
+     * 删除用户
+     * @param userId userId
+     * @return 是否成功
+     */
+    Boolean removeByUserId(String userId);
+
+    /**
+     * todo
+     * @param userUpdateRequest
+     * @return
+     */
+    Boolean updateUserById(UserUpdateRequest userUpdateRequest);
 }

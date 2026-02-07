@@ -41,6 +41,20 @@ export async function getAppVoByIdByAdmin(
   })
 }
 
+/** 此处后端没有提供注释 POST /app/cancel/gen */
+export async function cancelGenCode(
+  params: API.cancelGenCodeParams,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseBoolean>('/app/cancel/gen', {
+    method: 'POST',
+    params: {
+      ...params,
+    },
+    ...(options || {}),
+  })
+}
+
 /** 此处后端没有提供注释 POST /app/admin/list/page/vo */
 export async function listAppVoByPageByAdmin(
   body: API.AppQueryRequest,
@@ -71,19 +85,6 @@ export async function updateAppByAdmin(
   })
 }
 
-/** 此处后端没有提供注释 POST /app/cancel/gen */
-export async function cancelGenCode(
-  params: API.cancelGenCodeParams,
-  options?: { [key: string]: any }
-) {
-  return request<API.BaseResponseBoolean>('/app/cancel/gen', {
-    method: 'POST',
-    params: {
-      ...params,
-    },
-    ...(options || {}),
-  })
-}
 
 /** 此处后端没有提供注释 GET /app/chat/gen/code */
 export async function chatToGenCode(

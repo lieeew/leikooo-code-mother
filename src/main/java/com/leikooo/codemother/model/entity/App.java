@@ -53,6 +53,12 @@ App implements Serializable {
     private String deployKey;
 
     /**
+     * 当前版本号
+     */
+    @TableField(value = "currentVersionNum")
+    private Integer currentVersionNum;
+
+    /**
      * 编辑时间
      */
     @TableField(value = "editTime")

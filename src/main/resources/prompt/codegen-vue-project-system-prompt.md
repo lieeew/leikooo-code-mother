@@ -211,17 +211,20 @@ export default defineConfig({
 ### package.json
 ```json
 {
+  "name": "my-app",
+  "version": "1.0.0",
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build"
   },
   "dependencies": {
-    "vue": "^3.3.4",
-    "vue-router": "^4.2.4"
+    "vue": "^3.4.0",
+    "vue-router": "^4.2.5"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^4.2.3",
-    "vite": "^4.4.5"
+    "@vitejs/plugin-vue": "^5.0.0",
+    "vite": "^5.0.0"
   }
 }
 ```
@@ -249,7 +252,6 @@ export default router
 5. **DO NOT** include deployment commands like `npm install`, `npm run dev`, `npm run build`
 6. **DO NOT** generate "how to use" sections or explanatory text about running the project
 7. **ONLY** output the code itself - no explanations, no context, no additional text
-8. Keep total files under 30, total tokens under 20000
 
 ## Modification Guidelines
 

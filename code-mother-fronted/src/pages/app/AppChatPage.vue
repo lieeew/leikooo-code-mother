@@ -131,12 +131,7 @@
               :disabled="isGenerating"
             />
             <div class="input-actions">
-              <a-button
-                v-if="isGenerating"
-                type="primary"
-                danger
-                @click="cancelGeneration"
-              >
+              <a-button v-if="isGenerating" type="primary" danger @click="cancelGeneration">
                 <template #icon>
                   <CloseOutlined />
                 </template>
@@ -222,26 +217,21 @@
 </template>
 
 <script setup lang="ts">
-import {computed, nextTick, onMounted, onUnmounted, ref} from 'vue'
-import {useRoute, useRouter} from 'vue-router'
-import {message} from 'ant-design-vue'
-import {useLoginUserStore} from '@/stores/loginUser'
-import {
-  cancelGenCode,
-  deleteApp as deleteAppApi,
-  deployApp as deployAppApi,
-  getAppVoById,
-} from '@/api/appController'
-import {listAppChatHistory} from '@/api/chatHistoryController'
-import {CodeGenTypeEnum, formatCodeGenType} from '@/utils/codeGenTypes'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { message } from 'ant-design-vue'
+import { useLoginUserStore } from '@/stores/loginUser'
+import { cancelGenCode, getAppVoById } from '@/api/appController'
+import { listAppChatHistory } from '@/api/chatHistoryController'
+import { CodeGenTypeEnum, formatCodeGenType } from '@/utils/codeGenTypes'
 import request from '@/request'
 
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import AppDetailModal from '@/components/AppDetailModal.vue'
 import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
 import aiAvatar from '@/assets/aiAvatar.png'
-import {API_BASE_URL, getStaticPreviewUrl} from '@/config/env'
-import {type ElementInfo, VisualEditor} from '@/utils/visualEditor'
+import { API_BASE_URL, getStaticPreviewUrl } from '@/config/env'
+import { type ElementInfo, VisualEditor } from '@/utils/visualEditor'
 
 import {
   CloudUploadOutlined,
@@ -338,9 +328,9 @@ const loadChatHistory = async (isLoadMore = false) => {
         // 将对话历史转换为消息格式，并按时间正序排列（老消息在前）
         const historyMessages: Message[] = chatHistories
           .map((chat) => ({
-            type: (chat.type === 'USER' ? 'user' : 'ai') as 'user' | 'ai',
-            content: chat.content || '',
-            createTime: chat.timestamp,
+            type: (chat.messageType === 'user' ? 'user' : 'ai') as 'user' | 'ai',
+            content: chat.message || '',
+            createTime: chat.createTime,
           }))
           .reverse() // 反转数组，让老消息在前
         if (isLoadMore) {
@@ -351,7 +341,7 @@ const loadChatHistory = async (isLoadMore = false) => {
           messages.value = historyMessages
         }
         // 更新游标
-        lastCreateTime.value = chatHistories[chatHistories.length - 1]?.timestamp
+        lastCreateTime.value = chatHistories[chatHistories.length - 1]?.createTime
         // 检查是否还有更多历史
         hasMoreHistory.value = chatHistories.length === 10
       } else {

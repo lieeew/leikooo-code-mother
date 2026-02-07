@@ -6,8 +6,7 @@ import com.leikooo.codemother.config.CodeGeneratorConfig;
 import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
 import com.leikooo.codemother.service.AppService;
-import com.leikooo.codemother.utils.ConversationIdUtils;
-import lombok.RequiredArgsConstructor;
+import com.leikooo.codemother.utils.ConversationUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.chat.model.ToolContext;
@@ -18,11 +17,10 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -73,7 +71,7 @@ public class FileTools extends BaseTools {
             ToolContext toolContext
     ) {
         try {
-            String conversationId = ConversationIdUtils.getConversationId(toolContext);
+            String conversationId = ConversationUtils.getToolsContext(toolContext).appId();
             if (StringUtils.isEmpty(conversationId)) {
                 throw new IllegalArgumentException("conversationId 不能为空");
             }
@@ -91,7 +89,7 @@ public class FileTools extends BaseTools {
                 }
             }
             String normalizedPath = normalizePath(relativeFilePath);
-            Path outputDirPath = Paths.get(config.getOutputDir(), conversationId).toAbsolutePath().normalize();
+            Path outputDirPath = Paths.get(config.getOutputDir(), conversationId, "current").toAbsolutePath().normalize();
             Path filePath = outputDirPath.resolve(normalizedPath).normalize();
 
             if (!filePath.startsWith(outputDirPath)) {
@@ -153,12 +151,12 @@ public class FileTools extends BaseTools {
             ToolContext toolContext
     ) {
         try {
-            String conversationId = ConversationIdUtils.getConversationId(toolContext);
+            String conversationId = ConversationUtils.getToolsContext(toolContext).appId();
             if (StringUtils.isBlank(relativeFilePath)) {
                 throw new IllegalArgumentException("文件路径不能为空");
             }
             String normalizedPath = normalizePath(relativeFilePath);
-            Path outputDirPath = Paths.get(config.getOutputDir(), conversationId).toAbsolutePath().normalize();
+            Path outputDirPath = Paths.get(config.getOutputDir(), conversationId, "current").toAbsolutePath().normalize();
             Path filePath = outputDirPath.resolve(normalizedPath).normalize();
 
             if (!filePath.startsWith(outputDirPath)) {
@@ -213,7 +211,7 @@ public class FileTools extends BaseTools {
             ToolContext toolContext
     ) {
         try {
-            String conversationId = ConversationIdUtils.getConversationId(toolContext);
+            String conversationId = ConversationUtils.getToolsContext(toolContext).appId();
             if (StringUtils.isBlank(relativeFilePath)) {
                 throw new IllegalArgumentException("文件路径不能为空");
             }
@@ -228,7 +226,7 @@ public class FileTools extends BaseTools {
             }
 
             String normalizedPath = normalizePath(relativeFilePath);
-            Path outputDirPath = Paths.get(config.getOutputDir(), conversationId).toAbsolutePath().normalize();
+            Path outputDirPath = Paths.get(config.getOutputDir(), conversationId, "current").toAbsolutePath().normalize();
             Path filePath = outputDirPath.resolve(normalizedPath).normalize();
 
             if (!filePath.startsWith(outputDirPath)) {
@@ -285,6 +283,8 @@ public class FileTools extends BaseTools {
             ".c", ".h", ".json", ".xml", ".yaml", ".yml", ".md", ".sql", ".vue"
     ));
 
+    private static final Set<String> SKIP_DIRS = Set.of("node_modules", "dist");
+
     @Tool(description = "Lists files and directories in a given path. The path parameter must be relative path; ")
     public String listFiles(
             @ToolParam(description = "file relative path")
@@ -292,8 +292,8 @@ public class FileTools extends BaseTools {
             ToolContext toolContext
     ) {
         try {
-            String conversationId = ConversationIdUtils.getConversationId(toolContext);
-            Path outputDirPath = Paths.get(config.getOutputDir(), conversationId).toAbsolutePath().normalize();
+            String conversationId = ConversationUtils.getToolsContext(toolContext).appId();
+            Path outputDirPath = Paths.get(config.getOutputDir(), conversationId, "current").toAbsolutePath().normalize();
 
             Path targetDir;
             if (StringUtils.isBlank(relativeFilePath)) {
@@ -316,13 +316,26 @@ public class FileTools extends BaseTools {
             }
 
             StringBuilder result = new StringBuilder();
-            List<Path> codeFiles = Files.walk(targetDir)
-                    .filter(Files::isRegularFile)
-                    .filter(path -> {
-                        String ext = getFileExtension(path.getFileName().toString());
-                        return CODE_EXTENSIONS.contains(ext);
-                    })
-                    .toList();
+            List<Path> codeFiles = new ArrayList<>();
+            Files.walkFileTree(targetDir, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    String dirName = dir.getFileName() != null ? dir.getFileName().toString() : "";
+                    if (SKIP_DIRS.contains(dirName)) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    String ext = getFileExtension(file.getFileName().toString());
+                    if (CODE_EXTENSIONS.contains(ext)) {
+                        codeFiles.add(file);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
 
             result.append("代码文件列表 (").append(codeFiles.size()).append(" 个):\n");
             for (int i = 0; i < codeFiles.size(); i++) {

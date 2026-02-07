@@ -17,21 +17,18 @@ import com.leikooo.codemother.model.dto.GenAppDto;
 import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.model.entity.ObservableRecord;
 import com.leikooo.codemother.model.entity.User;
+import com.leikooo.codemother.model.enums.ChatHistoryMessageTypeEnum;
 import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
 import com.leikooo.codemother.model.vo.AppVO;
 import com.leikooo.codemother.model.vo.UserVO;
-import com.leikooo.codemother.service.AppService;
-import com.leikooo.codemother.service.ObservableRecordService;
-import com.leikooo.codemother.service.UserService;
+import com.leikooo.codemother.service.*;
 import com.leikooo.codemother.utils.UuidV7Generator;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.ibatis.annotations.Lang;
-import org.aspectj.util.LangUtil;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
-import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -50,12 +47,18 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
     private final UserService userService;
     private final GenerationManager generationManager;
     private final ObservableRecordService observableRecordService;
+    private final AppVersionService appVersionService;
+    private final ChatHistoryService chatHistoryService;
 
-    public AppServiceImpl(AiChatClient aiChatClient, UserService userService, GenerationManager generationManager, ObservableRecordService observableRecordService) {
+    public AppServiceImpl(AiChatClient aiChatClient, UserService userService,
+                          GenerationManager generationManager, ObservableRecordService observableRecordService,
+                          @Lazy AppVersionService appVersionService, ChatHistoryService chatHistoryService) {
         this.aiChatClient = aiChatClient;
         this.userService = userService;
         this.generationManager = generationManager;
         this.observableRecordService = observableRecordService;
+        this.appVersionService = appVersionService;
+        this.chatHistoryService = chatHistoryService;
     }
 
     @Override
@@ -66,9 +69,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
             App app = new App();
             app.setInitPrompt(initPrompt);
             app.setUserId(UuidV7Generator.stringToBytes(loginUser.getId()));
+            app.setCurrentVersionNum(0);
             ThrowUtils.throwIf(!this.save(app), ErrorCode.SYSTEM_ERROR);
             Long id = app.getId();
-            CodeGenTypeEnum codeGenTypeEnum = aiChatClient.selectGenTypeEnum(initPrompt, app.getId());
+            CodeGenTypeEnum codeGenTypeEnum = aiChatClient.selectGenTypeEnum(initPrompt, app.getId(), loginUser.getId());
             app.setCodeGenType(codeGenTypeEnum.getValue());
             ThrowUtils.throwIf(!this.updateById(app), ErrorCode.SYSTEM_ERROR);
             return id;
@@ -77,35 +81,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
 
     @Override
     public Flux<String> genAppCode(GenAppDto genAppDto) {
+        boolean chatHistory = chatHistoryService.addChatMessage(genAppDto.getAppId(), genAppDto.getMessage(),
+                ChatHistoryMessageTypeEnum.USER.getValue(), genAppDto.getUserLogin().getId());
+        ThrowUtils.throwIf(!chatHistory, ErrorCode.SYSTEM_ERROR, "保存消息失败");
         GenAppDto updateGenApp = getAppCodeGenEnum(genAppDto);
         String appId = updateGenApp.getAppId();
         return aiChatClient.generateCode(updateGenApp)
                 .doOnSubscribe(subscription -> generationManager.register(appId, subscription::cancel))
-                .doFinally(signalType -> generationManager.cancel(appId));
-    }
-
-    @Override
-    public Flux<String> fixBuildError(String appId, String errorAnalysis) {
-        App app = this.lambdaQuery().eq(App::getId, appId).one();
-        if (app == null) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "App not found: " + appId);
-        }
-
-        String initPrompt = app.getInitPrompt();
-        String fixPrompt = String.format("""
-                原始需求：%s
-                
-                构建失败，请根据以下错误分析修复代码：
-                
-                === 错误分析 ===
-                %s
-                
-                请重新生成符合需求的代码，修复所有构建错误。
-                """, initPrompt, errorAnalysis);
-
-        GenAppDto fixDto = new GenAppDto(fixPrompt, appId, CodeGenTypeEnum.getEnumByValue(app.getCodeGenType()));
-        return aiChatClient.generateCode(fixDto)
-                .doOnSubscribe(subscription -> generationManager.register(appId, () -> subscription.cancel()))
                 .doFinally(signalType -> generationManager.cancel(appId));
     }
 
@@ -117,7 +99,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
             String codeGenType = app.getCodeGenType();
             ThrowUtils.throwIf(StringUtils.isEmpty(codeGenType), ErrorCode.SYSTEM_ERROR);
             CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenType);
-            return new GenAppDto(message, appId, codeGenTypeEnum);
+            return new GenAppDto(message, appId, codeGenTypeEnum, genAppDto.getUserLogin());
         } catch (Exception e) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR);
         }

@@ -5,20 +5,23 @@
 <mapper namespace="com.leikooo.codemother.mapper.AppMapper">
 
     <resultMap id="BaseResultMap" type="com.leikooo.codemother.model.entity.App">
-        <id property="id" column="id"/>
-        <result property="appName" column="appName"/>
-        <result property="cover" column="cover"/>
-        <result property="initPrompt" column="initPrompt"/>
-        <result property="codeGenType" column="codeGenType"/>
-        <result property="deployKey" column="deployKey"/>
-        <result property="editTime" column="editTime"/>
-        <result property="createTime" column="createTime"/>
-        <result property="updateTime" column="updateTime"/>
-        <result property="isDelete" column="isDelete"/>
+        <id property="id" column="id" jdbcType="BIGINT"/>
+        <result property="appName" column="appName" jdbcType="VARCHAR"/>
+        <result property="cover" column="cover" jdbcType="VARCHAR"/>
+        <result property="initPrompt" column="initPrompt" jdbcType="VARCHAR"/>
+        <result property="codeGenType" column="codeGenType" jdbcType="VARCHAR"/>
+        <result property="deployKey" column="deployKey" jdbcType="VARCHAR"/>
+        <result property="priority" column="priority" jdbcType="INTEGER"/>
+        <result property="editTime" column="editTime" jdbcType="TIMESTAMP"/>
+        <result property="createTime" column="createTime" jdbcType="TIMESTAMP"/>
+        <result property="updateTime" column="updateTime" jdbcType="TIMESTAMP"/>
+        <result property="isDelete" column="isDelete" jdbcType="TINYINT"/>
+        <result property="currentVersionNum" column="currentVersionNum" jdbcType="INTEGER"/>
     </resultMap>
 
     <sql id="Base_Column_List">
         id,appName,cover,initPrompt,codeGenType,deployKey,
-        editTime,createTime,updateTime,isDelete,userId
+        priority,editTime,createTime,updateTime,isDelete,
+        currentVersionNum,userId
     </sql>
 </mapper>

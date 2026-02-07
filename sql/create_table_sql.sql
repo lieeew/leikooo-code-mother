@@ -78,3 +78,45 @@ create table if not exists observable_record
     timestamp       timestamp default CURRENT_TIMESTAMP not null comment '时间戳',
     key idx_conversation_id (conversation_id)
 ) comment '可观测性记录' collate utf8mb4_unicode_ci;
+
+-- 应用版本记录表
+CREATE TABLE IF NOT EXISTS app_version
+(
+    id         BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    appId      BIGINT                             NOT NULL COMMENT '关联的应用 ID',
+    versionNum INT                                NOT NULL COMMENT '版本号（v0, v1, v2...）',
+    fileUrl    VARCHAR(256)                       NULL COMMENT '代码 ZIP COS 地址',
+    status     VARCHAR(32)                        NULL COMMENT '版本状态：SOURCE_BUILDING/BUILDING/SUCCESS/NEED_FIX',
+    fileCount  INT                                NULL COMMENT '文件数量',
+    fileSize   BIGINT                             NULL COMMENT '总文件大小（字节）',
+    userId     BINARY(16)                         NOT NULL COMMENT '操作用户 ID',
+    createTime datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    isDelete   tinyint  default 0                 not null comment '是否删除',
+    KEY idx_app_id (appId),
+    KEY idx_app_version (appId, versionNum)
+) COMMENT '应用版本记录' COLLATE utf8mb4_unicode_ci;
+
+ALTER TABLE app_version
+    ADD COLUMN status VARCHAR(32) NULL COMMENT '版本状态' AFTER versionNum;
+
+ALTER TABLE app
+    ADD COLUMN currentVersionNum INT NULL COMMENT '当前版本号';
+
+ALTER TABLE app_version
+    ADD COLUMN status varchar(20) NULL COMMENT '构建状态';
+
+-- 对话历史表
+create table chat_history
+(
+    id          bigint auto_increment comment 'id' primary key,
+    message     text                               not null comment '消息',
+    messageType varchar(32)                        not null comment 'user/ai',
+    appId       bigint                             not null comment '应用id',
+    userId      BINARY(16)                         not null comment 'userId',
+    createTime  datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updateTime  datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    isDelete    tinyint  default 0                 not null comment '是否删除',
+    INDEX idx_appId (appId),                       -- 提升基于应用的查询性能
+    INDEX idx_createTime (createTime),             -- 提升基于时间的查询性能
+    INDEX idx_appId_createTime (appId, createTime) -- 游标查询核心索引
+) comment '对话历史' collate = utf8mb4_unicode_ci;
