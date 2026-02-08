@@ -1,6 +1,6 @@
 // @ts-ignore
 /* eslint-disable */
-import request from '@/request.ts'
+import request from '@/request'
 
 /** 此处后端没有提供注释 GET /static/${param0}/&#42;&#42; */
 export async function serveStaticResource(

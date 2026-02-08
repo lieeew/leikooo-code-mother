@@ -19,12 +19,15 @@ import com.leikooo.codemother.model.dto.CreatAppDto;
 import com.leikooo.codemother.model.dto.GenAppDto;
 import com.leikooo.codemother.model.dto.request.app.AppAdminUpdateRequest;
 import com.leikooo.codemother.model.dto.request.app.AppQueryRequest;
+import com.leikooo.codemother.model.dto.request.app.AppUpdateRequest;
 import com.leikooo.codemother.model.dto.request.app.CreatAppRequest;
 import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.model.vo.AppVO;
 import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.service.AppService;
 import com.leikooo.codemother.service.UserService;
+import com.leikooo.codemother.utils.UuidV7Generator;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.cache.annotation.Cacheable;
@@ -35,6 +38,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -96,6 +100,36 @@ public class AppController {
         ThrowUtils.throwIf(Objects.isNull(appId), ErrorCode.PARAMS_ERROR);
         boolean cancelled = generationManager.cancel(appId.toString());
         return ResultUtils.success(cancelled);
+    }
+
+    /**
+     * 更新应用（用户只能更新自己的应用名称）
+     *
+     * @param appUpdateRequest 更新请求
+     * @param request          请求
+     * @return 更新结果
+     */
+    @PostMapping("/update")
+    public BaseResponse<Boolean> updateApp(@RequestBody AppUpdateRequest appUpdateRequest, HttpServletRequest request) {
+        if (appUpdateRequest == null || appUpdateRequest.getId() == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        UserVO loginUser = userService.getUserLogin();
+        long id = appUpdateRequest.getId();
+        // 判断是否存在
+        App oldApp = appService.getById(id);
+        ThrowUtils.throwIf(oldApp == null, ErrorCode.NOT_FOUND_ERROR);
+        // 仅本人可更新
+        if (!Arrays.equals(oldApp.getUserId(), UuidV7Generator.stringToBytes(loginUser.getId()))) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
+        }
+        App app = new App();
+        app.setId(id);
+        app.setAppName(appUpdateRequest.getAppName());
+        // 设置编辑时间
+        boolean result = appService.updateById(app);
+        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        return ResultUtils.success(true);
     }
 
     @GetMapping("/get/vo")

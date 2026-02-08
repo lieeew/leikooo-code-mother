@@ -26,7 +26,6 @@ public class VueBuildUtils {
     public static BuildResult buildVueProject(String projectPath) {
         checkNodeAvailable();
         StringJoiner logJoiner = new StringJoiner(System.lineSeparator());
-        StringJoiner errorJoiner = new StringJoiner(System.lineSeparator());
         logJoiner.add("=== Vue Build Started ===");
         logJoiner.add("Project: " + projectPath);
 
@@ -45,35 +44,25 @@ public class VueBuildUtils {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     logJoiner.add(line);
-                    if (isErrorLine(line)) {
-                        errorJoiner.add(line);
-                    }
                 }
             }
 
             int exitCode = process.waitFor();
             logJoiner.add("=== Build Exit Code: " + exitCode + " ===");
 
-            boolean success = exitCode == 0 && errorJoiner.toString().isEmpty();
-            return new BuildResult(success, logJoiner.toString(), errorJoiner.toString(), exitCode);
+            boolean success = exitCode == 0;
+            return new BuildResult(success, logJoiner.toString(), exitCode);
 
         } catch (IOException e) {
             logJoiner.add("IO Exception: " + e.getMessage());
             log.error("Vue build IO exception: {}", e);
-            return new BuildResult(false, logJoiner.toString(), e.getMessage(), -1);
+            return new BuildResult(false, logJoiner.toString(), -1);
         } catch (InterruptedException e) {
             logJoiner.add("Interrupted: " + e.getMessage());
             log.error("Vue build interrupted: {}", e);
             Thread.currentThread().interrupt();
-            return new BuildResult(false, logJoiner.toString(), e.getMessage(), -1);
+            return new BuildResult(false, logJoiner.toString(), -1);
         }
-    }
-
-    private static boolean isErrorLine(String line) {
-        return line.toLowerCase().contains("error")
-                || line.toLowerCase().contains("failed")
-                || line.toLowerCase().contains("exception")
-                || line.startsWith("npm ERR!");
     }
 
     private static void checkNodeAvailable() {
@@ -100,7 +89,7 @@ public class VueBuildUtils {
     public record BuildResult(
             boolean success,
             String fullLog,
-            String errorLog,
             int exitCode
-    ) {}
+    ) {
+    }
 }

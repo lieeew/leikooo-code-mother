@@ -122,7 +122,7 @@ import {useRoute, useRouter} from 'vue-router'
 import type {FormInstance} from 'ant-design-vue'
 import {message} from 'ant-design-vue'
 import {useLoginUserStore} from '@/stores/loginUser'
-import {getAppVoById, updateApp, updateAppByAdmin} from '@/api/appController'
+import {getAppVo, updateApp, updateAppByAdmin} from '@/api/appController'
 import {formatCodeGenType} from '@/utils/codeGenTypes'
 import {formatTime} from '@/utils/time'
 import UserInfo from '@/components/UserInfo.vue'
@@ -174,7 +174,7 @@ const fetchAppInfo = async () => {
 
   loading.value = true
   try {
-    const res = await getAppVoById({ id: id as unknown as number })
+    const res = await getAppVo({ id: id as unknown as number })
     if (res.data.code === 0 && res.data.data) {
       appInfo.value = res.data.data
 

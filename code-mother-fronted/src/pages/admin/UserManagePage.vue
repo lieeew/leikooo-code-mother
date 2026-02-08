@@ -89,7 +89,7 @@ const total = ref(0)
 
 // 搜索条件
 const searchParams = reactive<API.UserQueryRequest>({
-  pageNum: 1,
+  current: 1,
   pageSize: 10,
 })
 
@@ -109,7 +109,7 @@ const fetchData = async () => {
 // 分页参数
 const pagination = computed(() => {
   return {
-    current: searchParams.pageNum ?? 1,
+    current: searchParams.current ?? 1,
     pageSize: searchParams.pageSize ?? 10,
     total: total.value,
     showSizeChanger: true,
@@ -119,7 +119,7 @@ const pagination = computed(() => {
 
 // 表格分页变化时的操作
 const doTableChange = (page: { current: number; pageSize: number }) => {
-  searchParams.pageNum = page.current
+  searchParams.current = page.current
   searchParams.pageSize = page.pageSize
   fetchData()
 }
@@ -127,7 +127,7 @@ const doTableChange = (page: { current: number; pageSize: number }) => {
 // 搜索数据
 const doSearch = () => {
   // 重置页码
-  searchParams.pageNum = 1
+  searchParams.current = 1
   fetchData()
 }
 

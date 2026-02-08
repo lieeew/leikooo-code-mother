@@ -131,7 +131,7 @@
               :disabled="isGenerating"
             />
             <div class="input-actions">
-              <a-button v-if="isGenerating" type="primary" danger @click="cancelGeneration">
+              <a-button v-if="isGenerating" type="primary" danger @click="cancel">
                 <template #icon>
                   <CloseOutlined />
                 </template>
@@ -221,7 +221,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useLoginUserStore } from '@/stores/loginUser'
-import { cancelGenCode, getAppVoById } from '@/api/appController'
+import { cancelGeneration, getAppVo } from '@/api/appController'
 import { listAppChatHistory } from '@/api/chatHistoryController'
 import { CodeGenTypeEnum, formatCodeGenType } from '@/utils/codeGenTypes'
 import request from '@/request'
@@ -374,7 +374,7 @@ const fetchAppInfo = async () => {
   appId.value = id
 
   try {
-    const res = await getAppVoById({ id: id as unknown as number })
+    const res = await getAppVo({ id: id as unknown as number })
     if (res.data.code === 0 && res.data.data) {
       appInfo.value = res.data.data
 
@@ -772,16 +772,16 @@ onMounted(() => {
 onUnmounted(() => {
   // EventSource 会在组件卸载时自动清理
   if (isGenerating.value) {
-    cancelGeneration()
+    cancel()
   }
 })
 
 // 取消生成
-const cancelGeneration = async () => {
+const cancel = async () => {
   if (!appId.value) return
 
   try {
-    const res = await cancelGenCode({ appId: appId.value })
+    const res = await cancelGeneration({ appId: appId.value })
     if (res.data.code === 0 && res.data.data) {
       message.success('已停止生成')
     }

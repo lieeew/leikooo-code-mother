@@ -199,7 +199,7 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
                     metadata.put("buildTime", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
                 } else {
                     metadata.put("status", VersionStatusEnum.NEED_FIX.name());
-                    metadata.put("errorLog", buildResult.errorLog());
+                    metadata.put("errorLog", buildResult.fullLog());
                 }
                 saveMetadata(versionPath, metadata);
             }

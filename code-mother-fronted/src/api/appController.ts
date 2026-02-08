@@ -1,9 +1,9 @@
 // @ts-ignore
 /* eslint-disable */
-import request from '@/request.ts'
+import request from '@/request'
 
 /** 此处后端没有提供注释 POST /app/add */
-export async function addApp(body: API.AppAddRequest, options?: { [key: string]: any }) {
+export async function createApp(body: API.CreatAppRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseLong>('/app/add', {
     method: 'POST',
     headers: {
@@ -41,20 +41,6 @@ export async function getAppVoByIdByAdmin(
   })
 }
 
-/** 此处后端没有提供注释 POST /app/cancel/gen */
-export async function cancelGenCode(
-  params: API.cancelGenCodeParams,
-  options?: { [key: string]: any }
-) {
-  return request<API.BaseResponseBoolean>('/app/cancel/gen', {
-    method: 'POST',
-    params: {
-      ...params,
-    },
-    ...(options || {}),
-  })
-}
-
 /** 此处后端没有提供注释 POST /app/admin/list/page/vo */
 export async function listAppVoByPageByAdmin(
   body: API.AppQueryRequest,
@@ -85,11 +71,25 @@ export async function updateAppByAdmin(
   })
 }
 
+/** 此处后端没有提供注释 POST /app/cancel/gen */
+export async function cancelGeneration(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: API.cancelGenerationParams,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseBoolean>('/app/cancel/gen', {
+    method: 'POST',
+    params: {
+      ...params,
+    },
+    ...(options || {}),
+  })
+}
 
 /** 此处后端没有提供注释 GET /app/chat/gen/code */
-export async function chatToGenCode(
+export async function generateApp(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.chatToGenCodeParams,
+  params: API.generateAppParams,
   options?: { [key: string]: any }
 ) {
   return request<API.ServerSentEventString[]>('/app/chat/gen/code', {
@@ -101,48 +101,10 @@ export async function chatToGenCode(
   })
 }
 
-/** 此处后端没有提供注释 POST /app/delete */
-export async function deleteApp(body: API.DeleteRequest, options?: { [key: string]: any }) {
-  return request<API.BaseResponseBoolean>('/app/delete', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    data: body,
-    ...(options || {}),
-  })
-}
-
-/** 此处后端没有提供注释 POST /app/deploy */
-export async function deployApp(body: API.AppDeployRequest, options?: { [key: string]: any }) {
-  return request<API.BaseResponseString>('/app/deploy', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    data: body,
-    ...(options || {}),
-  })
-}
-
-/** 此处后端没有提供注释 GET /app/download/${param0} */
-export async function downloadAppCode(
-  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.downloadAppCodeParams,
-  options?: { [key: string]: any }
-) {
-  const { appId: param0, ...queryParams } = params
-  return request<any>(`/app/download/${param0}`, {
-    method: 'GET',
-    params: { ...queryParams },
-    ...(options || {}),
-  })
-}
-
 /** 此处后端没有提供注释 GET /app/get/vo */
-export async function getAppVoById(
+export async function getAppVo(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.getAppVOByIdParams,
+  params: API.getAppVOParams,
   options?: { [key: string]: any }
 ) {
   return request<API.BaseResponseAppVO>('/app/get/vo', {
@@ -174,7 +136,7 @@ export async function listMyAppVoByPage(
   body: API.AppQueryRequest,
   options?: { [key: string]: any }
 ) {
-  return request<API.BaseResponsePageAppVO>('/app/my/list/page/vo', {
+  return request<API.BaseResponseListAppVO>('/app/my/list/page/vo', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

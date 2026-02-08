@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import {onMounted, reactive, ref} from 'vue'
-import {useRouter} from 'vue-router'
-import {message} from 'ant-design-vue'
-import {useLoginUserStore} from '@/stores/loginUser'
-import {addApp, listGoodAppVoByPage, listMyAppVoByPage} from '@/api/appController'
-import {getDeployUrl} from '@/config/env'
+import { onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { message } from 'ant-design-vue'
+import { useLoginUserStore } from '@/stores/loginUser'
+import { createApp, listGoodAppVoByPage, listMyAppVoByPage } from '@/api/appController'
+import { getDeployUrl } from '@/config/env'
 import AppCard from '@/components/AppCard.vue'
 
 const router = useRouter()
@@ -38,7 +38,7 @@ const setPrompt = (prompt: string) => {
 // 优化提示词功能已移除
 
 // 创建应用
-const createApp = async () => {
+const addApp = async () => {
   if (!userPrompt.value.trim()) {
     message.warning('请输入应用描述')
     return
@@ -52,7 +52,7 @@ const createApp = async () => {
 
   creating.value = true
   try {
-    const res = await addApp({
+    const res = await createApp({
       initPrompt: userPrompt.value.trim(),
     })
 
@@ -181,7 +181,7 @@ onMounted(() => {
           class="prompt-input"
         />
         <div class="input-actions">
-          <a-button type="primary" size="large" @click="createApp" :loading="creating">
+          <a-button type="primary" size="large" @click="addApp" :loading="creating">
             <template #icon>
               <span>↑</span>
             </template>

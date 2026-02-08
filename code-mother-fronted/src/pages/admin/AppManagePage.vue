@@ -160,7 +160,7 @@ const total = ref(0)
 
 // 搜索条件
 const searchParams = reactive<API.AppQueryRequest>({
-  pageNum: 1,
+  current: 1,
   pageSize: 10,
 })
 
@@ -172,7 +172,7 @@ const fetchData = async () => {
     })
     if (res.data.data) {
       data.value = res.data.data.records ?? []
-      total.value = res.data.data.totalRow ?? 0
+      total.value = res.data.data.total ?? 0
     } else {
       message.error('获取数据失败，' + res.data.message)
     }
@@ -190,7 +190,7 @@ onMounted(() => {
 // 分页参数
 const pagination = computed(() => {
   return {
-    current: searchParams.pageNum ?? 1,
+    current: searchParams.current ?? 1,
     pageSize: searchParams.pageSize ?? 10,
     total: total.value,
     showSizeChanger: true,
@@ -200,7 +200,7 @@ const pagination = computed(() => {
 
 // 表格变化处理
 const doTableChange = (page: { current: number; pageSize: number }) => {
-  searchParams.pageNum = page.current
+  searchParams.current = page.current
   searchParams.pageSize = page.pageSize
   fetchData()
 }
@@ -208,7 +208,7 @@ const doTableChange = (page: { current: number; pageSize: number }) => {
 // 搜索
 const doSearch = () => {
   // 重置页码
-  searchParams.pageNum = 1
+  searchParams.current = 1
   fetchData()
 }
 
@@ -247,7 +247,7 @@ const deleteApp = async (id: number | undefined) => {
   if (!id) return
 
   try {
-    const res = await deleteAppByAdmin({ id })
+    const res = await deleteAppByAdmin({ appId: id })
     if (res.data.code === 0) {
       message.success('删除成功')
       // 刷新数据

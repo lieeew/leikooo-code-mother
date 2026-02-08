@@ -7,6 +7,7 @@ import com.leikooo.codemother.exception.ThrowUtils;
 import com.leikooo.codemother.manager.CosManager;
 import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.model.entity.AppVersion;
+import com.leikooo.codemother.model.vo.AppVersionVO;
 import com.leikooo.codemother.service.AppService;
 import com.leikooo.codemother.service.AppVersionService;
 import com.leikooo.codemother.service.UserService;
@@ -26,6 +27,8 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.List;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -58,9 +61,10 @@ public class AppVersionController {
      * @return 版本列表
      */
     @GetMapping("/list/{appId}")
-    public BaseResponse<?> listVersions(@PathVariable Long appId) {
+    public BaseResponse<List<AppVersionVO>> listVersions(@PathVariable(name = "appId") Long appId) {
         ThrowUtils.throwIf(appId == null, ErrorCode.PARAMS_ERROR);
-        return ResultUtils.success(appVersionService.listByAppId(appId));
+        List<AppVersion> appVersions = appVersionService.listByAppId(appId);
+        return ResultUtils.success(appVersions.stream().map(AppVersionVO::toVO).toList());
     }
 
     /**
@@ -70,8 +74,9 @@ public class AppVersionController {
      * @return 是否成功
      */
     @PostMapping("/rollback")
-    public BaseResponse<Boolean> rollback(@RequestParam Long appId,
-                                         @RequestParam Integer versionNum) {
+    public BaseResponse<Boolean> rollback(
+            @RequestParam(name = "appId") Long appId,
+            @RequestParam(name = "versionNum") Integer versionNum) {
         ThrowUtils.throwIf(appId == null || versionNum == null, ErrorCode.PARAMS_ERROR);
 
         // 1. 获取版本信息
@@ -89,7 +94,7 @@ public class AppVersionController {
 
             // 4. 重新构建
             VueBuildUtils.BuildResult buildResult = VueBuildUtils.buildVueProject(localPath);
-            ThrowUtils.throwIf(StringUtils.isNotBlank(buildResult.errorLog()), ErrorCode.SYSTEM_ERROR, "构建失败: " + buildResult.errorLog());
+            ThrowUtils.throwIf(!buildResult.success(), ErrorCode.SYSTEM_ERROR, "构建失败");
 
             // 5. 保存新版本
             appVersionService.saveVersion(app.getId().toString());
@@ -110,8 +115,9 @@ public class AppVersionController {
      * @return zip 文件
      */
     @GetMapping("/download")
-    public ResponseEntity<byte[]> downloadVersion(@RequestParam Long appId,
-                                                  @RequestParam Integer versionNum) {
+    public ResponseEntity<byte[]> downloadVersion(
+            @RequestParam(name = "appId") Long appId,
+            @RequestParam(name = "versionNum") Integer versionNum) {
         AppVersion version = appVersionService.getByVersionNum(appId, versionNum);
         if (version == null) {
             return ResponseEntity.notFound().build();
