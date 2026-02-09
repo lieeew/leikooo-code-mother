@@ -24,6 +24,16 @@ public class VueBuildUtils {
      * @return BuildResult
      */
     public static BuildResult buildVueProject(String projectPath) {
+        return buildVueProject(projectPath, null);
+    }
+
+    /**
+     * 安装依赖 & build，返回完整日志（支持路径替换）
+     * @param projectPath path
+     * @param appId appId，用于路径替换
+     * @return BuildResult
+     */
+    public static BuildResult buildVueProject(String projectPath, String appId) {
         checkNodeAvailable();
         StringJoiner logJoiner = new StringJoiner(System.lineSeparator());
         logJoiner.add("=== Vue Build Started ===");
@@ -40,10 +50,12 @@ public class VueBuildUtils {
             pb.redirectErrorStream(true);
             Process process = pb.start();
 
+            String relativePrefix = extractRelativePrefix(projectPath);
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    logJoiner.add(line);
+                    String replacedLine = line.replace(projectPath, relativePrefix);
+                    logJoiner.add(replacedLine);
                 }
             }
 
@@ -63,6 +75,16 @@ public class VueBuildUtils {
             Thread.currentThread().interrupt();
             return new BuildResult(false, logJoiner.toString(), -1);
         }
+    }
+
+    /**
+     * 从绝对路径中提取相对路径前缀
+     * 如: K:/Job-Coding/code-mother/generated-apps/xxx/current -> generated-apps/xxx/current
+     */
+    private static String extractRelativePrefix(String projectPath) {
+        String normalized = projectPath.replace("\\", "/");
+        int idx = normalized.lastIndexOf("generated-apps/");
+        return idx >= 0 ? normalized.substring(idx) : "generated-apps";
     }
 
     private static void checkNodeAvailable() {

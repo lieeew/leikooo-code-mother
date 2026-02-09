@@ -16,6 +16,8 @@ import com.leikooo.codemother.service.UserService;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * 对话历史 控制层。
@@ -47,7 +49,7 @@ public class ChatHistoryController {
             @PathVariable(name = "appId") Long appId,
             @RequestParam(defaultValue = "10", name = "pageSize") int pageSize,
             @RequestParam(required = false, name = "lastCreateTime")
-            LocalDateTime lastCreateTime
+            String lastCreateTime
     ) {
         UserVO loginUser = userService.getUserLogin();
         Page<ChatHistory> result = chatHistoryService.listAppChatHistoryByPage(appId, pageSize, lastCreateTime, loginUser);

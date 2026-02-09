@@ -166,7 +166,7 @@ public class FileTools extends BaseTools {
                 throw new IllegalArgumentException("文件不存在: " + normalizedPath);
             }
             StringBuilder result = new StringBuilder();
-            result.append("文件路径: ").append(normalizedPath).append("\n\n");
+            result.append("文件路径: ").append(normalizedPath).append("\n");
 
             List<String> allLines = Files.readAllLines(filePath, StandardCharsets.UTF_8);
             int start = offset != null ? Math.max(0, offset) : 0;
@@ -174,9 +174,11 @@ public class FileTools extends BaseTools {
             int end = Math.min(start + lineLimit, allLines.size());
 
             result.append("行数范围: L").append(start + 1).append("-L").append(end).append("\n\n");
+            result.append("```").append(getFileExtension(normalizedPath)).append("\n");
             for (int i = start; i < end; i++) {
-                result.append(String.format("%6d | %s%n", i + 1, allLines.get(i)));
+                result.append(allLines.get(i)).append("\n");
             }
+            result.append("```");
 
             if (end < allLines.size()) {
                 result.append(String.format("%n... 还有 %d 行未显示 (总行数: %d)%n", allLines.size() - end, allLines.size()));

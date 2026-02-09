@@ -16,13 +16,13 @@ import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.service.AppService;
 import com.leikooo.codemother.service.ChatHistoryService;
 import com.leikooo.codemother.utils.UuidV7Generator;
-import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Objects;
 
 /**
@@ -68,7 +68,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
 
     @Override
     public Page<ChatHistory> listAppChatHistoryByPage(Long appId, int pageSize,
-                                                      LocalDateTime lastCreateTime,
+                                                      String lastCreateTime,
                                                       UserVO loginUser) {
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID不能为空");
         ThrowUtils.throwIf(pageSize <= 0 || pageSize > 50, ErrorCode.PARAMS_ERROR, "页面大小必须在1-50之间");
@@ -82,7 +82,12 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         // 构建查询条件
         ChatHistoryQueryRequest queryRequest = new ChatHistoryQueryRequest();
         queryRequest.setAppId(appId);
-        queryRequest.setLastCreateTime(lastCreateTime);
+        LocalDateTime lastCreate = null;
+        if (lastCreateTime != null && !lastCreateTime.isEmpty()) {
+            OffsetDateTime offsetDateTime = OffsetDateTime.parse(lastCreateTime);
+            lastCreate = offsetDateTime.toLocalDateTime().plusHours(8);
+        }
+        queryRequest.setLastCreateTime(lastCreate);
         QueryWrapper<ChatHistory> queryWrapper = this.getQueryWrapper(queryRequest);
         // 查询数据
         return this.page(Page.of(1, pageSize), queryWrapper);
@@ -112,8 +117,10 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
                 .like(StringUtils.isNotBlank(message), "message", message)
                 .eq(StringUtils.isNotBlank(messageType), "messageType", messageType)
                 .eq(Objects.nonNull(appId), "appId", appId);
-        // 游标查询逻辑 - 只使用 createTime 作为游标
-        queryWrapper.lt(Objects.nonNull(lastCreateTime), "createTime", lastCreateTime);
+        // 游标查询逻辑
+        if (Objects.nonNull(lastCreateTime)) {
+            queryWrapper.lt(true, "createTime", lastCreateTime);
+        }
         // 排序
         if (StrUtil.isNotBlank(sortField)) {
             queryWrapper.orderBy(true, "ascend".equals(sortOrder), sortField);

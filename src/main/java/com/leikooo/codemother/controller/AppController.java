@@ -1,6 +1,7 @@
 package com.leikooo.codemother.controller;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -22,15 +23,23 @@ import com.leikooo.codemother.model.dto.request.app.AppQueryRequest;
 import com.leikooo.codemother.model.dto.request.app.AppUpdateRequest;
 import com.leikooo.codemother.model.dto.request.app.CreatAppRequest;
 import com.leikooo.codemother.model.entity.App;
+import com.leikooo.codemother.model.entity.AppVersion;
+import com.leikooo.codemother.model.enums.VersionStatusEnum;
 import com.leikooo.codemother.model.vo.AppVO;
 import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.service.AppService;
+import com.leikooo.codemother.service.AppVersionService;
 import com.leikooo.codemother.service.UserService;
 import com.leikooo.codemother.utils.UuidV7Generator;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.cache.annotation.Cacheable;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
@@ -54,11 +63,13 @@ public class AppController {
     private final AppService appService;
     private final UserService userService;
     private final GenerationManager generationManager;
+    private final AppVersionService appVersionService;
 
-    public AppController(AppService appService, UserService userService, GenerationManager generationManager) {
+    public AppController(AppService appService, UserService userService, GenerationManager generationManager, AppVersionService appVersionService) {
         this.appService = appService;
         this.userService = userService;
         this.generationManager = generationManager;
+        this.appVersionService = appVersionService;
     }
 
     @PostMapping("/add")
@@ -259,5 +270,35 @@ public class AppController {
         ThrowUtils.throwIf(id <= 0, ErrorCode.PARAMS_ERROR);
         // 获取封装类
         return ResultUtils.success(appService.getAppVO(id));
+    }
+
+    /**
+     * 获取构建错误信息（供前端用户确认后发送修复）
+     *
+     * @param appId 应用 id
+     * @return 错误信息字符串
+     */
+    @GetMapping("/fix/error")
+    public BaseResponse<String> getFixError(@RequestParam(name = "appId") Long appId) {
+        ThrowUtils.throwIf(appId == null, ErrorCode.PARAMS_ERROR);
+        App app = appService.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR);
+        Integer currentVersion = app.getCurrentVersionNum();
+        AppVersion version = appVersionService.getByVersionNum(appId, currentVersion);
+        ThrowUtils.throwIf(version == null, ErrorCode.NOT_FOUND_ERROR);
+        ThrowUtils.throwIf(!VersionStatusEnum.NEED_FIX.name().equals(version.getStatus()),
+                ErrorCode.OPERATION_ERROR, "当前版本无需修复");
+        // 读取 metadata.json 获取 errorLog
+        String versionPath = "generated-apps/" + appId + "/v" + currentVersion;
+        File metadataFile = new File(versionPath, "metadata.json");
+        ThrowUtils.throwIf(!metadataFile.exists(), ErrorCode.SYSTEM_ERROR, "metadata.json 不存在");
+        try {
+            String content = Files.readString(metadataFile.toPath());
+            JSONObject metadata = new JSONObject(content);
+            String errorLog = metadata.getStr("errorLog", "");
+            return ResultUtils.success(String.format("遇到了下面的 BUG: %s", errorLog));
+        } catch (IOException e) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "读取 metadata.json 失败");
+        }
     }
 }

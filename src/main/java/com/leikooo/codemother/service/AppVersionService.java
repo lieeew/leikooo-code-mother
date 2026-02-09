@@ -41,7 +41,14 @@ public interface AppVersionService extends IService<AppVersion> {
     void initVersion(Long appId);
 
     /**
-     * 保存新版本（每次 AI 对话调用）
+     * 回滚到指定版本
+     * @param appId 应用ID
+     * @param versionNum 版本号
+     */
+    void rollback(Long appId, Integer versionNum);
+
+    /**
+     * 保存新版本
      * @param appId 应用ID
      * @return 新版本号
      */

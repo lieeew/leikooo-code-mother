@@ -1,8 +1,11 @@
 package com.leikooo.codemother.service.impl;
 
+import cn.hutool.core.io.FileUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leikooo.codemother.config.CosClientConfig;
+import com.leikooo.codemother.exception.ErrorCode;
+import com.leikooo.codemother.exception.ThrowUtils;
 import com.leikooo.codemother.manager.CosManager;
 import com.leikooo.codemother.mapper.AppVersionMapper;
 import com.leikooo.codemother.model.entity.App;
@@ -15,8 +18,12 @@ import com.leikooo.codemother.utils.ProjectPathUtils;
 import com.leikooo.codemother.utils.VersionCache;
 import com.leikooo.codemother.utils.VueBuildUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -25,12 +32,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
-/**
- * @author leikooo
- * @description 针对表【app_version(应用版本记录)】的数据库操作Service实现
- * @createDate 2026-02-04 23:52:49
- */
 @Slf4j
 @Service
 public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVersion>
@@ -42,11 +47,9 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
     private final VersionCache versionCache;
     private final ObjectMapper objectMapper;
 
-    public AppVersionServiceImpl(CosManager cosManager,
-                                 AppService appService,
-                                 CosClientConfig cosClientConfig,
-                                 VersionCache versionCache,
-                                 ObjectMapper objectMapper) {
+    public AppVersionServiceImpl(CosManager cosManager, AppService appService,
+                                CosClientConfig cosClientConfig, VersionCache versionCache,
+                                ObjectMapper objectMapper) {
         this.cosManager = cosManager;
         this.appService = appService;
         this.cosClientConfig = cosClientConfig;
@@ -85,13 +88,11 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
     @Override
     public void initVersion(Long appId) {
         try {
-            // 1. 创建 v0 目录和 current 目录
             Path v0Path = Paths.get("generated-apps", appId.toString(), "v0", "src");
             Path currentPath = Paths.get("generated-apps", appId.toString(), "current", "src");
             Files.createDirectories(v0Path);
             Files.createDirectories(currentPath);
 
-            // 2. 保存 AppVersion 记录到数据库
             AppVersion version = AppVersion.builder()
                     .appId(appId)
                     .userId(getLoginUserId(appId))
@@ -101,9 +102,7 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
                     .build();
             this.save(version);
 
-            // 3. 初始化缓存
             versionCache.set(appId.toString(), 0);
-
             log.info("[AppVersion] 初始化 v0 和 current 完成: appId={}", appId);
         } catch (IOException e) {
             log.error("[AppVersion] 初始化失败: appId={}", appId, e);
@@ -123,8 +122,6 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
     @Override
     public Integer saveVersion(String appIdStr) {
         Long appId = Long.parseLong(appIdStr);
-
-        // 1. 获取当前最大版本号
         Integer maxVersion = versionCache.get(appIdStr);
         if (maxVersion == null) {
             maxVersion = getMaxVersionNum(appId);
@@ -132,17 +129,14 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         int newVersionNum = maxVersion + 1;
 
         try {
-            // 2. 创建版本目录
             Path versionPath = Paths.get("generated-apps", appIdStr, "v" + newVersionNum);
             Files.createDirectories(versionPath);
 
-            // 3. 复制 current 目录下的文件到版本目录
             Path currentPath = Paths.get("generated-apps", appIdStr, "current");
             if (Files.exists(currentPath)) {
                 copyDirectory(currentPath, versionPath);
             }
 
-            // 4. 生成 metadata.json
             Map<String, Object> metadata = new HashMap<>();
             metadata.put("versionNum", newVersionNum);
             metadata.put("appId", appIdStr);
@@ -150,7 +144,6 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
             metadata.put("createTime", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
             saveMetadata(versionPath, metadata);
 
-            // 5. 保存版本记录到数据库
             int fileCount = countFiles(versionPath);
             AppVersion version = AppVersion.builder()
                     .appId(appId)
@@ -161,9 +154,12 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
                     .build();
             this.save(version);
 
-            // 6. 更新缓存
-            versionCache.set(appIdStr, newVersionNum);
+            appService.lambdaUpdate()
+                    .eq(App::getId, appId)
+                    .set(App::getCurrentVersionNum, newVersionNum)
+                    .update();
 
+            versionCache.set(appIdStr, newVersionNum);
             log.info("[AppVersion] 保存版本完成: appId={}, version=v{}", appId, newVersionNum);
             return newVersionNum;
 
@@ -178,18 +174,15 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         Long appId = Long.parseLong(appIdStr);
 
         try {
-            // 1. 获取当前版本号
             Integer versionNum = versionCache.get(appIdStr);
             if (versionNum == null) {
                 versionNum = getMaxVersionNum(appId);
             }
 
-            // 2. 执行构建
             String projectPath = ProjectPathUtils.getProjectPath(appIdStr);
-            VueBuildUtils.BuildResult buildResult = VueBuildUtils.buildVueProject(projectPath);
+            VueBuildUtils.BuildResult buildResult = VueBuildUtils.buildVueProject(projectPath, appIdStr);
             BuildResultEnum buildResultEnum = BuildResultEnum.fromExitCode(buildResult.exitCode());
 
-            // 3. 更新 metadata.json
             Path versionPath = Paths.get("generated-apps", appIdStr, "v" + versionNum);
             Path metadataPath = versionPath.resolve("metadata.json");
             if (Files.exists(metadataPath)) {
@@ -204,7 +197,6 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
                 saveMetadata(versionPath, metadata);
             }
 
-            // 4. 更新数据库状态
             String status = buildResultEnum == BuildResultEnum.SUCCESS
                     ? VersionStatusEnum.SUCCESS.name()
                     : VersionStatusEnum.NEED_FIX.name();
@@ -221,14 +213,123 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         }
     }
 
-    private void copyDirectory(Path source, Path target) throws IOException {
-        Path distToSkip = source.resolve("dist");
-        Path nodeModulesToSkip = source.resolve("node_modules");
+    @Override
+    public void rollback(Long appId, Integer versionNum) {
+        Path currentPath = Paths.get("generated-apps", appId.toString(), "current");
+        Path versionPath = Paths.get("generated-apps", appId.toString(), "v" + versionNum);
 
+        try {
+            if (Files.exists(currentPath)) {
+                clearDirectory(currentPath);
+            }
+
+            if (Files.exists(versionPath)) {
+                copyDirectoryExclude(versionPath, currentPath, "metadata.json");
+                log.info("[Rollback] 本地回滚成功: appId={}, version=v{}", appId, versionNum);
+            } else {
+                AppVersion version = getByVersionNum(appId, versionNum);
+                ThrowUtils.throwIf(version == null, ErrorCode.NOT_FOUND_ERROR, "版本不存在");
+                downloadAndExtract(version.getFileUrl(), currentPath.toString());
+                log.info("[Rollback] COS 回滚成功: appId={}, version=v{}", appId, versionNum);
+            }
+            VueBuildUtils.buildVueProject(currentPath.toString());
+        } catch (IOException e) {
+            log.error("[Rollback] 回滚失败: appId={}, version=v{}", appId, versionNum, e);
+            throw new RuntimeException("回滚失败", e);
+        }
+    }
+
+    private void clearDirectory(Path dir) {
+        try {
+            Files.walkFileTree(dir, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    try {
+                        Files.delete(file);
+                    } catch (IOException e) {
+                        log.warn("[Clear] 文件被占用，跳过: {}", file);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
+                    try {
+                        Files.delete(dir);
+                    } catch (IOException e) {
+                        log.warn("[Clear] 目录被占用，跳过: {}", dir);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            log.error("[Clear] 清空目录失败: {}", dir, e);
+        }
+    }
+
+    private void copyDirectoryExclude(Path source, Path target, String... excludeFiles) throws IOException {
+        Set<String> excludeSet = Set.of(excludeFiles);
         Files.walkFileTree(source, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                // 跳过 dist 和 node_modules
+                Path targetDir = target.resolve(source.relativize(dir));
+                Files.createDirectories(targetDir);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                if (excludeSet.contains(file.getFileName().toString())) {
+                    return FileVisitResult.CONTINUE;
+                }
+                Path targetFile = target.resolve(source.relativize(file));
+                Files.copy(file, targetFile, StandardCopyOption.REPLACE_EXISTING);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private void downloadAndExtract(String cosKey, String targetPath) throws IOException {
+        File targetDir = new File(targetPath);
+        if (!targetDir.exists()) {
+            targetDir.mkdirs();
+        }
+
+        File tempZip = File.createTempFile("download", ".zip");
+        try (FileOutputStream fos = new FileOutputStream(tempZip)) {
+            IOUtils.copy(cosManager.getObject(cosKey).getObjectContent(), fos);
+        }
+
+        try (FileInputStream fis = new FileInputStream(tempZip);
+             ZipInputStream zis = new ZipInputStream(fis)) {
+
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                File file = new File(targetDir, entry.getName());
+                if (entry.isDirectory()) {
+                    file.mkdirs();
+                } else {
+                    file.getParentFile().mkdirs();
+                    try (FileOutputStream fos = new FileOutputStream(file)) {
+                        byte[] buffer = new byte[8192];
+                        int len;
+                        while ((len = zis.read(buffer)) > 0) {
+                            fos.write(buffer, 0, len);
+                        }
+                    }
+                }
+                zis.closeEntry();
+            }
+        }
+        tempZip.delete();
+    }
+
+    private void copyDirectory(Path source, Path target) throws IOException {
+        Path distToSkip = source.resolve("dist");
+        Path nodeModulesToSkip = source.resolve("node_modules");
+        Files.walkFileTree(source, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
                 if (dir.equals(distToSkip) || dir.equals(nodeModulesToSkip)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
@@ -259,7 +360,3 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(metadataPath.toFile(), metadata);
     }
 }
-
-
-
-

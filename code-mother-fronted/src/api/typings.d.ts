@@ -180,6 +180,10 @@ declare namespace API {
     id: number
   }
 
+  type getFixErrorParams = {
+    appId: number
+  }
+
   type getUserByIdParams = {
     userId: string
   }

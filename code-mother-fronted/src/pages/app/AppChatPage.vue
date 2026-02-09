@@ -33,6 +33,18 @@
           </template>
           部署
         </a-button>
+        <a-button
+          v-if="isOwner && versions[versions.length - 1]?.status === AppVersionStatusEnum.NEED_FIX"
+          type="primary"
+          danger
+          @click="fixError"
+          :loading="isFixing"
+        >
+          <template #icon>
+            <ToolOutlined />
+          </template>
+          修复错误
+        </a-button>
       </div>
     </div>
 
@@ -179,6 +191,48 @@
           </div>
         </div>
         <div class="preview-content">
+          <!-- 版本边栏 -->
+          <div class="version-sidebar">
+          <div class="version-sidebar-header">版本历史</div>
+          <div
+            v-for="version in versions"
+            :key="version.id"
+            class="version-item"
+            :class="{
+              'version-success': version.status === AppVersionStatusEnum.SUCCESS,
+              'version-fixing': version.status === AppVersionStatusEnum.NEED_FIX,
+              'version-building': [AppVersionStatusEnum.SOURCE_BUILDING, AppVersionStatusEnum.BUILDING].includes(version.status as AppVersionStatusEnum),
+            }"
+          >
+            <div class="version-main">
+              <span class="version-icon">
+                <CheckCircleOutlined v-if="version.status === AppVersionStatusEnum.SUCCESS" />
+                <SyncOutlined v-else-if="[AppVersionStatusEnum.SOURCE_BUILDING, AppVersionStatusEnum.BUILDING].includes(version.status as AppVersionStatusEnum)" class="version-loading" />
+                <WarningOutlined v-else-if="version.status === AppVersionStatusEnum.NEED_FIX" />
+              </span>
+              <span class="version-label">v{{ version.versionNum }}</span>
+            </div>
+            <div class="version-actions">
+              <a-button
+                v-if="version.status === AppVersionStatusEnum.NEED_FIX && isOwner && versions[versions.length - 1]?.id === version.id"
+                type="text"
+                size="small"
+                danger
+                @click.stop="fixError"
+              >
+                修复
+              </a-button>
+              <a-button
+                v-if="version.status === AppVersionStatusEnum.SUCCESS && isOwner && versions[versions.length - 1]?.id !== version.id"
+                type="text"
+                size="small"
+                @click.stop="rollbackVersion(version.versionNum || 0)"
+              >
+                回滚
+              </a-button>
+            </div>
+          </div>
+          </div>
           <div v-if="!previewUrl && !isGenerating" class="preview-placeholder">
             <div class="placeholder-icon">🌐</div>
             <p>网站文件生成完成后将在这里展示</p>
@@ -221,8 +275,10 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useLoginUserStore } from '@/stores/loginUser'
-import { cancelGeneration, getAppVo } from '@/api/appController'
+import { cancelGeneration, getAppVo, getFixError } from '@/api/appController'
 import { listAppChatHistory } from '@/api/chatHistoryController'
+import { listVersions, rollback } from '@/api/appVersionController'
+import { AppVersionStatusEnum } from '@/constants/appVersion'
 import { CodeGenTypeEnum, formatCodeGenType } from '@/utils/codeGenTypes'
 import request from '@/request'
 
@@ -241,6 +297,10 @@ import {
   ExportOutlined,
   InfoCircleOutlined,
   SendOutlined,
+  ToolOutlined,
+  CheckCircleOutlined,
+  SyncOutlined,
+  WarningOutlined,
 } from '@ant-design/icons-vue'
 
 const route = useRoute()
@@ -281,6 +341,10 @@ const deployUrl = ref('')
 
 // 下载相关
 const downloading = ref(false)
+
+// 版本相关
+const versions = ref<API.AppVersionVO[]>([])
+const isFixing = ref(false)
 
 // 可视化编辑相关
 const isEditMode = ref(false)
@@ -362,6 +426,66 @@ const loadMoreHistory = async () => {
   await loadChatHistory(true)
 }
 
+// 获取版本列表
+const fetchVersions = async () => {
+  if (!appId.value) return
+  try {
+    const res = await listVersions({ appId: appId.value })
+    if (res.data.code === 0 && res.data.data) {
+      versions.value = res.data.data.sort((a, b) => (a.versionNum || 0) - (b.versionNum || 0))
+    }
+  } catch (error) {
+    console.error('获取版本列表失败：', error)
+  }
+}
+
+// 修复错误
+const fixError = async () => {
+  if (!appId.value || isFixing.value) return
+  isFixing.value = true
+  try {
+    const res = await getFixError({ appId: appId.value })
+    if (res.data.code === 0 && res.data.data) {
+      userInput.value = res.data.data
+      message.success('已获取修复建议')
+    } else {
+      message.error('获取修复建议失败：' + res.data.message)
+    }
+  } catch (error) {
+    console.error('获取修复建议失败：', error)
+    message.error('获取修复建议失败')
+  } finally {
+    isFixing.value = false
+  }
+}
+
+// 版本点击处理
+const handleVersionClick = async (version: API.AppVersionVO) => {
+  if (version.status === AppVersionStatusEnum.NEED_FIX) {
+    await fixError()
+  } else {
+    await rollbackVersion(version.versionNum || 0)
+  }
+}
+
+// 回滚版本
+const rollbackVersion = async (versionNum: number) => {
+  if (!appId.value) return
+  try {
+    const res = await rollback({ appId: appId.value, versionNum })
+    if (res.data.code === 0 && res.data.data) {
+      message.success('回滚成功')
+      await fetchVersions()
+      updatePreview()
+    } else {
+      message.error('回滚失败：' + res.data.message)
+    }
+  } catch (error) {
+    console.error('回滚失败：', error)
+    message.error('回滚失败')
+  }
+}
+
 // 获取应用信息
 const fetchAppInfo = async () => {
   const id = route.params.id as string
@@ -378,6 +502,8 @@ const fetchAppInfo = async () => {
     if (res.data.code === 0 && res.data.data) {
       appInfo.value = res.data.data
 
+      // 获取版本列表
+      await fetchVersions()
       // 先加载对话历史
       await loadChatHistory()
       // 如果有至少2条对话记录，展示对应的网站
@@ -1005,7 +1131,7 @@ const eventSourceRef = ref<EventSource | null>(null)
 }
 
 .preview-iframe {
-  width: 100%;
+  width: calc(100% - 200px);
   height: 100%;
   border: none;
 }
@@ -1014,7 +1140,129 @@ const eventSourceRef = ref<EventSource | null>(null)
   margin: 0 16px;
 }
 
+/* 版本边栏 */
+.version-sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 200px;
+  height: 100%;
+  background: #f3f3f3;
+  border-left: 1px solid #e5e5e5;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+/* 边栏标题 */
+.version-sidebar-header {
+  padding: 12px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6c6c6c;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+/* 版本项 */
+.version-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background-color 200ms ease;
+  border-left: 2px solid transparent;
+}
+
+.version-item:hover {
+  background: #e8e8e8;
+}
+
+.version-item.version-active {
+  background: #e0e0e0;
+  border-left-color: #007acc;
+}
+
+/* 版本主要内容 */
+.version-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.version-icon {
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+}
+
+.version-label {
+  font-size: 13px;
+  color: #333;
+  font-weight: 500;
+}
+
+/* 状态特定样式 */
+.version-success .version-icon {
+  color: #22863a;
+}
+
+.version-building .version-icon {
+  color: #0366d6;
+}
+
+.version-building .version-loading {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.version-fixing {
+  background: #fff5f5;
+  border-left-color: #d73a49;
+}
+
+.version-fixing .version-icon {
+  color: #d73a49;
+}
+
+.version-fixing:hover {
+  background: #ffebeb;
+}
+
+/* 操作按钮 */
+.version-actions {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.version-item:hover .version-actions {
+  opacity: 1;
+}
+
 /* 响应式设计 */
+@media (max-width: 1440px) {
+  .version-sidebar {
+    width: 150px;
+  }
+  
+  .preview-iframe {
+    width: calc(100% - 150px);
+  }
+  
+  .version-label {
+    font-size: 12px;
+  }
+}
+
 @media (max-width: 1024px) {
   .main-content {
     flex-direction: column;
@@ -1024,6 +1272,26 @@ const eventSourceRef = ref<EventSource | null>(null)
   .preview-section {
     flex: none;
     height: 50vh;
+  }
+  
+  .version-sidebar {
+    width: 60px;
+  }
+  
+  .preview-iframe {
+    width: calc(100% - 60px);
+  }
+  
+  .version-sidebar-header {
+    display: none;
+  }
+  
+  .version-label {
+    display: none;
+  }
+  
+  .version-actions {
+    display: none;
   }
 }
 

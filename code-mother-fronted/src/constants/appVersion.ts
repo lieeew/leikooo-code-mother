@@ -1,0 +1,6 @@
+export enum AppVersionStatusEnum {
+  SOURCE_BUILDING = 'SOURCE_BUILDING',
+  BUILDING = 'BUILDING',
+  SUCCESS = 'SUCCESS',
+  NEED_FIX = 'NEED_FIX',
+}
