@@ -2,6 +2,7 @@ package com.leikooo.codemother.mapper;
 
 import com.leikooo.codemother.model.entity.App;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Param;
 
 /**
 * @author leikooo
@@ -11,6 +12,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 */
 public interface AppMapper extends BaseMapper<App> {
 
+    String getAppNameById(@Param("id") Long id);
 }
 
 

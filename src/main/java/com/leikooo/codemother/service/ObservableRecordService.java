@@ -2,6 +2,11 @@ package com.leikooo.codemother.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.leikooo.codemother.model.entity.ObservableRecord;
+import com.leikooo.codemother.model.enums.RankingTypeEnum;
+import com.leikooo.codemother.model.vo.AppRankingVO;
+import com.leikooo.codemother.model.vo.AppStatisticsVO;
+
+import java.util.List;
 
 /**
  * @author leikooo
@@ -11,9 +16,17 @@ import com.leikooo.codemother.model.entity.ObservableRecord;
 public interface ObservableRecordService extends IService<ObservableRecord> {
 
     /**
-     * todo
-     * @param appId
-     * @return
+     * 获取应用统计信息
+     * @param appId 应用ID
+     * @return 统计信息
      */
-    ObservableRecord getAppStatistics(String appId);
+    AppStatisticsVO getAppStatistics(Long appId);
+
+    /**
+     * 获取全局排行榜
+     * @param type 排序类型：tokens | toolCalls | duration
+     * @param limit 返回数量
+     * @return 排行榜列表
+     */
+    List<AppRankingVO> getRanking(RankingTypeEnum type, Integer limit);
 }

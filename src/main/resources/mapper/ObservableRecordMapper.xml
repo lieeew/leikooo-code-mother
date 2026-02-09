@@ -14,18 +14,49 @@
             <result property="timestamp" column="timestamp" />
     </resultMap>
 
+    <resultMap id="RankingResultMap" type="com.leikooo.codemother.model.vo.AppRankingVO">
+        <result property="appId" column="appId" />
+        <result property="value" column="value" />
+    </resultMap>
+
     <sql id="Base_Column_List">
-        id,conversation_id,input_tokens,output_tokens,completion_tokens,duration_ms,
+        id,conversation_id,input_tokens,output_tokens,duration_ms,
         tool_call_count,timestamp
     </sql>
 
     <select id="getAppStatistics" resultType="com.leikooo.codemother.model.entity.ObservableRecord">
-        select
+        SELECT
             SUM(input_tokens) as inputTokens,
             SUM(output_tokens) as outputTokens,
             SUM(duration_ms) as durationMs,
             SUM(tool_call_count) as toolCallCount
-        from observable_record
-        where conversation_id = #{appId};
+        FROM observable_record
+        WHERE conversation_id = #{appId};
+    </select>
+
+    <select id="countChatsByAppId" resultType="java.lang.Long">
+        SELECT COUNT(DISTINCT DATE_FORMAT(timestamp, '%Y-%m-%d %H:%i:%s'))
+        FROM observable_record
+        WHERE conversation_id = #{appId};
+    </select>
+
+    <select id="getRanking" resultMap="RankingResultMap">
+        SELECT
+            conversation_id AS appId,
+            <choose>
+                <when test="type == 'toolCalls'">
+                    SUM(tool_call_count) AS value
+                </when>
+                <when test="type == 'duration'">
+                    SUM(duration_ms) AS value
+                </when>
+                <otherwise>
+                    SUM(input_tokens) + SUM(output_tokens) AS value
+                </otherwise>
+            </choose>
+        FROM observable_record
+        GROUP BY conversation_id
+        ORDER BY value DESC
+        LIMIT #{limit};
     </select>
 </mapper>

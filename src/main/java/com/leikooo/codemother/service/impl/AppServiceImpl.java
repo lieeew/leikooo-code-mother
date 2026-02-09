@@ -19,6 +19,7 @@ import com.leikooo.codemother.model.entity.ObservableRecord;
 import com.leikooo.codemother.model.entity.User;
 import com.leikooo.codemother.model.enums.ChatHistoryMessageTypeEnum;
 import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
+import com.leikooo.codemother.model.vo.AppStatisticsVO;
 import com.leikooo.codemother.model.vo.AppVO;
 import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.service.*;
@@ -165,15 +166,14 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
     }
 
     private void getAppStatistics(AppVO appVO) {
-        ObservableRecord appStatistics = observableRecordService.getAppStatistics(appVO.getId());
-        if (Objects.nonNull(appStatistics)) {
-            Long inputTokens = Optional.of(appStatistics).map(ObservableRecord::getInputTokens).orElse(0L);
-            Long outputTokens = Optional.of(appStatistics).map(ObservableRecord::getOutputTokens).orElse(0L);
-            Long consumeTime = Optional.of(appStatistics).map(ObservableRecord::getDurationMs).orElse(0L);
-
-            appVO.setTotalInputTokens(inputTokens);
-            appVO.setTotalOutputTokens(outputTokens);
-            appVO.setTotalConsumeTime(consumeTime);
+        if (appVO.getId() == null) {
+            return;
+        }
+        AppStatisticsVO stats = observableRecordService.getAppStatistics(Long.parseLong(appVO.getId()));
+        if (Objects.nonNull(stats)) {
+            appVO.setTotalInputTokens(stats.getTotalTokens());
+            appVO.setTotalOutputTokens(stats.getTotalTokens());
+            appVO.setTotalConsumeTime(stats.getAvgDurationMs());
         }
     }
 

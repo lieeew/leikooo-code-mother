@@ -1,4 +1,20 @@
 declare namespace API {
+  type App = {
+    id?: number
+    appName?: string
+    cover?: string
+    initPrompt?: string
+    codeGenType?: string
+    deployKey?: string
+    currentVersionNum?: number
+    editTime?: string
+    createTime?: string
+    updateTime?: string
+    isDelete?: number
+    priority?: number
+    userId?: string[]
+  }
+
   type AppAdminUpdateRequest = {
     id?: number
     appName?: string
@@ -20,6 +36,20 @@ declare namespace API {
     createTime?: string
     updateTime?: string
     priority?: number
+  }
+
+  type AppRankingVO = {
+    appId?: number
+    appName?: string
+    value?: number
+    app?: App
+  }
+
+  type AppStatisticsVO = {
+    totalTokens?: number
+    totalChats?: number
+    totalToolCalls?: number
+    avgDurationMs?: number
   }
 
   type AppUpdateRequest = {
@@ -55,6 +85,12 @@ declare namespace API {
     user?: UserVO
   }
 
+  type BaseResponseAppStatisticsVO = {
+    code?: number
+    data?: AppStatisticsVO
+    message?: string
+  }
+
   type BaseResponseAppVO = {
     code?: number
     data?: AppVO
@@ -64,6 +100,12 @@ declare namespace API {
   type BaseResponseBoolean = {
     code?: number
     data?: boolean
+    message?: string
+  }
+
+  type BaseResponseListAppRankingVO = {
+    code?: number
+    data?: AppRankingVO[]
     message?: string
   }
 
@@ -172,6 +214,10 @@ declare namespace API {
     message: string
   }
 
+  type getAppStatisticsParams = {
+    appId: number
+  }
+
   type getAppVOByIdByAdminParams = {
     arg0: number
   }
@@ -182,6 +228,11 @@ declare namespace API {
 
   type getFixErrorParams = {
     appId: number
+  }
+
+  type getRankingParams = {
+    type?: string
+    limit?: number
   }
 
   type getUserByIdParams = {

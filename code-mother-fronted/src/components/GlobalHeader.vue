@@ -83,6 +83,11 @@ const originItems = [
     title: '应用管理',
   },
   {
+    key: '/admin/appStatistics',
+    label: 'APP统计',
+    title: 'APP统计',
+  },
+  {
     key: 'others',
     label: h('a', { href: 'https://www.codefather.cn', target: '_blank' }, '编程导航'),
     title: '编程导航',

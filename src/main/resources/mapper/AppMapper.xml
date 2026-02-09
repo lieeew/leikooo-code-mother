@@ -24,4 +24,8 @@
         priority,editTime,createTime,updateTime,isDelete,
         currentVersionNum,userId
     </sql>
+
+    <select id="getAppNameById" resultType="java.lang.String">
+        SELECT appName FROM app WHERE id = #{id} AND isDelete = 0;
+    </select>
 </mapper>
