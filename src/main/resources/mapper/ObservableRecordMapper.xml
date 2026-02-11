@@ -44,6 +44,12 @@
         SELECT
             conversation_id AS appId,
             <choose>
+                <when test="type == 'inputTokens'">
+                    SUM(input_tokens) AS value
+                </when>
+                <when test="type == 'outputTokens'">
+                    SUM(output_tokens) AS value
+                </when>
                 <when test="type == 'toolCalls'">
                     SUM(tool_call_count) AS value
                 </when>

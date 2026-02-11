@@ -26,8 +26,12 @@ import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.model.entity.AppVersion;
 import com.leikooo.codemother.model.enums.VersionStatusEnum;
 import com.leikooo.codemother.model.vo.AppVO;
+import com.leikooo.codemother.model.vo.FileContentVO;
+import com.leikooo.codemother.model.vo.FileListVO;
+import com.leikooo.codemother.model.vo.FileTreeNodeVO;
 import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.service.AppService;
+import com.leikooo.codemother.service.AppSourceService;
 import com.leikooo.codemother.service.AppVersionService;
 import com.leikooo.codemother.service.UserService;
 import com.leikooo.codemother.utils.UuidV7Generator;
@@ -64,12 +68,14 @@ public class AppController {
     private final UserService userService;
     private final GenerationManager generationManager;
     private final AppVersionService appVersionService;
+    private final AppSourceService appSourceService;
 
-    public AppController(AppService appService, UserService userService, GenerationManager generationManager, AppVersionService appVersionService) {
+    public AppController(AppService appService, UserService userService, GenerationManager generationManager, AppVersionService appVersionService, AppSourceService appSourceService) {
         this.appService = appService;
         this.userService = userService;
         this.generationManager = generationManager;
         this.appVersionService = appVersionService;
+        this.appSourceService = appSourceService;
     }
 
     @PostMapping("/add")
@@ -300,5 +306,29 @@ public class AppController {
         } catch (IOException e) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "读取 metadata.json 失败");
         }
+    }
+
+    @GetMapping("/source/file-tree")
+    public BaseResponse<FileTreeNodeVO> getFileTree(@RequestParam(name = "appId") Long appId) {
+        return ResultUtils.success(appSourceService.getFileTree(appId));
+    }
+
+    @GetMapping("/source/file-content")
+    public BaseResponse<FileContentVO> getFileContent(
+            @RequestParam(name = "appId") Long appId,
+            @RequestParam(name = "filePath") String filePath,
+            @RequestParam(name = "start", defaultValue = "0") Integer start,
+            @RequestParam(name = "limit", defaultValue = "1000") Integer limit
+    ) {
+        return ResultUtils.success(appSourceService.getFileContent(appId, filePath, start, limit));
+    }
+
+    @GetMapping("/source/files")
+    public BaseResponse<FileListVO> getFileList(
+            @RequestParam(name = "appId") Long appId,
+            @RequestParam(name = "directory", required = false) String directory,
+            @RequestParam(name = "recursive", defaultValue = "false") Boolean recursive
+    ) {
+        return ResultUtils.success(appSourceService.getFileList(appId, directory, recursive));
     }
 }

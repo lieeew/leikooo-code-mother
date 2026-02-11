@@ -35,6 +35,22 @@
             </a-space>
           </div>
 
+          <!-- 图表展示 -->
+          <div class="charts-grid">
+            <ChartContainer 
+              :options="rankingBarChartOptions" 
+              :loading="loadingRanking"
+              class="chart-item"
+              height="400px"
+            />
+            <ChartContainer 
+              :options="rankingPieChartOptions" 
+              :loading="loadingRanking"
+              class="chart-item"
+              height="400px"
+            />
+          </div>
+
           <!-- 排行榜表格 -->
           <a-table
             :columns="rankingColumns"
@@ -43,27 +59,33 @@
             :pagination="false"
             class="ranking-table"
           >
-            <template #bodyCell="{ column, record, index }">
-              <template v-if="column.dataIndex === 'rank'">
-                <span :class="{
-                  'rank-badge': true,
-                  'rank-first': index === 0,
-                  'rank-second': index === 1,
-                  'rank-third': index === 2
-                }">
-                  {{ index + 1 }}
-                </span>
-              </template>
-              <template v-else-if="column.dataIndex === 'appName'">
-                {{ record.app?.appName || record.appName || '未命名应用' }}
-              </template>
-              <template v-else-if="column.dataIndex === 'user'">
-                <UserInfo :user="record.app?.user" size="small" />
-              </template>
-              <template v-else-if="column.dataIndex === 'value'">
-                <span class="token-value">{{ formatNumber(record.value) }}</span>
-              </template>
-            </template>
+             <template #bodyCell="{ column, record, index }">
+               <template v-if="column.dataIndex === 'rank'">
+                 <span :class="{
+                   'rank-badge': true,
+                   'rank-first': index === 0,
+                   'rank-second': index === 1,
+                   'rank-third': index === 2
+                 }">
+                   {{ index + 1 }}
+                 </span>
+               </template>
+               <template v-else-if="column.dataIndex === 'appName'">
+                 {{ record.app?.appName || record.appName || '未命名应用' }}
+               </template>
+               <template v-else-if="column.dataIndex === 'user'">
+                 <UserInfo :user="record.app?.user" size="small" />
+               </template>
+               <template v-else-if="column.dataIndex === 'value'">
+                 <span class="token-value">{{ formatNumber(record.value) }}</span>
+               </template>
+               <template v-else-if="column.dataIndex === 'inputTokens'">
+                 <span class="token-value">{{ formatNumber(record.value) }}</span>
+               </template>
+               <template v-else-if="column.dataIndex === 'outputTokens'">
+                 <span class="token-value">{{ formatNumber(record.value) }}</span>
+               </template>
+             </template>
           </a-table>
         </div>
       </a-tab-pane>
@@ -71,6 +93,22 @@
       <!-- 详细统计标签页 -->
       <a-tab-pane key="statistics" tab="详细统计">
         <div class="statistics-tab">
+           <!-- 图表展示 -->
+           <div class="charts-grid">
+             <ChartContainer 
+               :options="scatterChartOptions" 
+               :loading="loadingStatistics"
+               class="chart-item"
+               height="400px"
+             />
+             <ChartContainer 
+               :options="trendChartOptions" 
+               :loading="loadingStatistics"
+               class="chart-item"
+               height="400px"
+             />
+           </div>
+
           <a-form layout="inline" :model="searchParams" @finish="doSearch" class="search-form">
             <a-form-item label="应用名称">
               <a-input
@@ -163,6 +201,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import * as echarts from 'echarts'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { getRanking } from '@/api/observableRecordController'
 import { listAppVoByPageByAdmin } from '@/api/appController'
@@ -171,6 +210,7 @@ import { formatTime } from '@/utils/time'
 import { RANKING_TYPE_OPTIONS, RankingTypeEnum } from '@/constants/observableTypes'
 import UserInfo from '@/components/UserInfo.vue'
 import AppDetailModal from '@/components/AppDetailModal.vue'
+import ChartContainer from '@/components/ChartContainer.vue'
 
 const loginUserStore = useLoginUserStore()
 
@@ -183,34 +223,43 @@ const loadingRanking = ref(false)
 const rankingType = ref(RankingTypeEnum.TOKENS)
 const rankingLimit = ref('10')
 
-const rankingColumns = [
-  {
-    title: '排名',
-    dataIndex: 'rank',
-    key: 'rank',
-    width: 80,
-    align: 'center' as const,
-  },
-  {
-    title: '应用名称',
-    dataIndex: 'appName',
-    key: 'appName',
-    width: 200,
-  },
-  {
-    title: '创建者',
-    dataIndex: 'user',
-    key: 'user',
-    width: 150,
-  },
-  {
-    title: '消耗Token',
+const rankingColumns = computed(() => {
+  const baseColumns: any[] = [
+    {
+      title: '排名',
+      dataIndex: 'rank',
+      key: 'rank',
+      width: 80,
+      align: 'center' as const,
+    },
+    {
+      title: '应用名称',
+      dataIndex: 'appName',
+      key: 'appName',
+      width: 200,
+    },
+    {
+      title: '创建者',
+      dataIndex: 'user',
+      key: 'user',
+      width: 150,
+    },
+  ]
+
+  // 根据排行类型添加对应列
+  const type = rankingType.value as string
+  const { title: columnTitle } = getRankingLabel()
+  
+  baseColumns.push({
+    title: columnTitle,
     dataIndex: 'value',
     key: 'value',
     width: 150,
-    align: 'right' as const,
-  },
-]
+    align: 'right',
+  })
+
+  return baseColumns
+})
 
 // 统计数据
 const statisticsData = ref<API.AppVO[]>([])
@@ -373,6 +422,304 @@ const showAppDetail = (app: API.AppVO) => {
   appDetailVisible.value = true
 }
 
+// ========== 图表配置 ==========
+
+// 获取排行榜标题和单位
+const getRankingLabel = (): { title: string; unit: string } => {
+  const type = rankingType.value as string
+  switch (type) {
+    case RankingTypeEnum.TOKENS:
+    case 'tokens':
+      return { title: 'Token 消耗量', unit: 'Tokens' }
+    case RankingTypeEnum.INPUT_TOKENS:
+    case 'inputTokens':
+      return { title: '输入 Token 消耗量', unit: 'Tokens' }
+    case RankingTypeEnum.OUTPUT_TOKENS:
+    case 'outputTokens':
+      return { title: '输出 Token 消耗量', unit: 'Tokens' }
+    case RankingTypeEnum.TOOL_CALLS:
+    case 'toolCalls':
+      return { title: '工具调用次数', unit: '次' }
+    case RankingTypeEnum.DURATION:
+    case 'duration':
+      return { title: '平均耗时', unit: 'ms' }
+    default:
+      return { title: '数据', unit: '' }
+  }
+}
+
+// 排行榜柱状图
+const rankingBarChartOptions = computed((): echarts.EChartsOption => {
+  const top10 = rankingData.value.slice(0, 10)
+  const { title, unit } = getRankingLabel()
+  
+  // 根据排行类型获取对应数据（后端返回的 value 字段根据 type 参数表示不同含义）
+  const getChartData = () => {
+    return top10.map(d => d.value || 0)
+  }
+  
+  return {
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: any) => {
+        if (Array.isArray(params) && params.length > 0) {
+          const param = params[0]
+          const value = param.value.toLocaleString()
+          return `${param.name}<br/>${value} ${unit}`
+        }
+        return ''
+      },
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '15%',
+      containLabel: true,
+    },
+    xAxis: {
+      type: 'category',
+      data: top10.map(d => d.app?.appName || d.appName || '未命名'),
+      axisLabel: {
+        interval: 0,
+        rotate: 45,
+      },
+    },
+    yAxis: {
+      type: 'value',
+      name: title,
+    },
+    series: [
+      {
+        data: getChartData(),
+        type: 'bar',
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#83bff6' },
+            { offset: 0.5, color: '#188df0' },
+            { offset: 1, color: '#188df0' },
+          ]),
+        },
+        label: {
+          show: true,
+          position: 'top',
+          formatter: '{c}',
+        },
+      },
+    ],
+  }
+})
+
+// 排行榜饼图
+const rankingPieChartOptions = computed((): echarts.EChartsOption => {
+  const top5 = rankingData.value.slice(0, 5)
+  const { title, unit } = getRankingLabel()
+
+  // 后端返回的 value 字段根据 type 参数表示不同含义
+  const total = rankingData.value.reduce((sum, item) => sum + (item.value || 0), 0)
+  const topTotal = top5.reduce((sum, item) => sum + (item.value || 0), 0)
+  const others = Math.max(0, total - topTotal)
+
+  const data = [
+    ...top5.map(d => ({
+      value: d.value || 0,
+      name: d.app?.appName || d.appName || '未命名',
+    })),
+  ]
+
+  if (others > 0) {
+    data.push({
+      value: others,
+      name: '其他应用',
+    })
+  }
+
+  return {
+    tooltip: {
+      trigger: 'item',
+      formatter: `{{b}}: {{c}} ${unit} ({{d}}%)`,
+    },
+    legend: {
+      orient: 'vertical',
+      left: 'left',
+      top: 'center',
+    },
+    series: [
+      {
+        name: title + '占比',
+        type: 'pie',
+        radius: '50%',
+        data: data,
+        emphasis: {
+          itemStyle: {
+            shadowBlur: 10,
+            shadowOffsetX: 0,
+            shadowColor: 'rgba(0, 0, 0, 0.5)',
+          },
+        },
+      },
+    ],
+  }
+})
+
+// 双柱图 - 输入/输出 Token 对比
+const statisticsBarChartOptions = computed((): echarts.EChartsOption => {
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow',
+      },
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '15%',
+      containLabel: true,
+    },
+    legend: {
+      data: ['输入 Token', '输出 Token'],
+      top: 10,
+    },
+    xAxis: {
+      type: 'category',
+      data: statisticsData.value.map(d => d.appName || '未命名'),
+      axisLabel: {
+        interval: 0,
+        rotate: 45,
+      },
+    },
+    yAxis: {
+      type: 'value',
+      name: 'Token 数量',
+    },
+    series: [
+      {
+        name: '输入 Token',
+        data: statisticsData.value.map(d => d.totalInputTokens || 0),
+        type: 'bar',
+        itemStyle: { color: '#91d1f7' },
+      },
+      {
+        name: '输出 Token',
+        data: statisticsData.value.map(d => d.totalOutputTokens || 0),
+        type: 'bar',
+        itemStyle: { color: '#ffa940' },
+      },
+    ],
+  }
+})
+
+// 散点图 - Token 消耗 vs 耗时分析
+const scatterChartOptions = computed((): echarts.EChartsOption => {
+  const data = statisticsData.value.map((d, idx) => ({
+    value: [
+      (d.totalInputTokens || 0) + (d.totalOutputTokens || 0),
+      d.totalConsumeTime || 0,
+    ],
+    appName: d.appName || '未命名',
+    idx,
+  }))
+
+  return {
+    tooltip: {
+      trigger: 'item',
+      formatter: (params: any) => {
+        const item = data.find(d => d.idx === params.dataIndex)
+        return `${item?.appName}<br/>总Token: ${params.value[0].toLocaleString()}<br/>耗时: ${params.value[1]}ms`
+      },
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '15%',
+      containLabel: true,
+    },
+    xAxis: {
+      type: 'value',
+      name: '总消耗 Token',
+      nameTextStyle: {
+        color: '#333',
+      },
+    },
+    yAxis: {
+      type: 'value',
+      name: '总消耗时间 (ms)',
+      nameTextStyle: {
+        color: '#333',
+      },
+    },
+    series: [
+      {
+        name: '应用',
+        data: data.map(d => d.value),
+        type: 'scatter',
+        symbolSize: 8,
+        itemStyle: {
+          color: '#5470c6',
+          opacity: 0.7,
+        },
+      },
+    ],
+  }
+})
+
+// 线性图 - Token 消耗趋势（按创建时间）
+const trendChartOptions = computed((): echarts.EChartsOption => {
+  const sorted = [...statisticsData.value].sort(
+    (a, b) =>
+      new Date(a.createTime || 0).getTime() - new Date(b.createTime || 0).getTime(),
+  )
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '15%',
+      containLabel: true,
+    },
+    xAxis: {
+      type: 'category',
+      name: '应用创建时间',
+      data: sorted.map(d => formatTime(d.createTime || '')),
+      axisLabel: {
+        interval: 0,
+        rotate: 45,
+      },
+    },
+    yAxis: {
+      type: 'value',
+      name: 'Token 消耗量',
+    },
+    series: [
+      {
+        name: '累计 Token 消耗',
+        data: sorted.map(d => (d.totalInputTokens || 0) + (d.totalOutputTokens || 0)),
+        type: 'line',
+        smooth: true,
+        itemStyle: {
+          color: '#ee6666',
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(238, 102, 102, 0.3)' },
+            { offset: 1, color: 'rgba(238, 102, 102, 0)' },
+          ]),
+        },
+        label: {
+          show: false,
+        },
+      },
+    ],
+  }
+})
+
 // 初始化
 onMounted(() => {
   loadRanking()
@@ -440,5 +787,31 @@ onMounted(() => {
 
 .search-form {
   margin-bottom: 16px;
+}
+
+/* 图表样式 */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.chart-item {
+  background: #fff;
+  padding: 16px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.chart-item.full-width {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1200px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

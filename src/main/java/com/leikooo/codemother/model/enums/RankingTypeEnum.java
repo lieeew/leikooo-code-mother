@@ -5,6 +5,8 @@ import com.leikooo.codemother.exception.ErrorCode;
 
 public enum RankingTypeEnum {
     TOKENS("tokens"),
+    INPUT_TOKENS("inputTokens"),
+    OUTPUT_TOKENS("outputTokens"),
     TOOL_CALLS("toolCalls"),
     DURATION("duration");
 

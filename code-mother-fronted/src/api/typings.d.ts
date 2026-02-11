@@ -103,6 +103,24 @@ declare namespace API {
     message?: string
   }
 
+  type BaseResponseFileContentVO = {
+    code?: number
+    data?: FileContentVO
+    message?: string
+  }
+
+  type BaseResponseFileListVO = {
+    code?: number
+    data?: FileListVO
+    message?: string
+  }
+
+  type BaseResponseFileTreeNodeVO = {
+    code?: number
+    data?: FileTreeNodeVO
+    message?: string
+  }
+
   type BaseResponseListAppRankingVO = {
     code?: number
     data?: AppRankingVO[]
@@ -209,6 +227,39 @@ declare namespace API {
     versionNum: number
   }
 
+  type FileContentVO = {
+    filePath?: string
+    content?: string
+    totalLines?: number
+    returnedLines?: number
+    language?: string
+    encoding?: string
+    hasMore?: boolean
+  }
+
+  type FileInfo = {
+    name?: string
+    path?: string
+    type?: string
+    size?: number
+    modifyTime?: string
+  }
+
+  type FileListVO = {
+    directory?: string
+    files?: FileInfo[]
+  }
+
+  type FileTreeNodeVO = {
+    id?: string
+    name?: string
+    type?: string
+    path?: string
+    size?: number
+    extension?: string
+    children?: FileTreeNodeVO[]
+  }
+
   type generateAppParams = {
     appId: number
     message: string
@@ -224,6 +275,23 @@ declare namespace API {
 
   type getAppVOParams = {
     id: number
+  }
+
+  type getFileContentParams = {
+    appId: number
+    filePath: string
+    start?: number
+    limit?: number
+  }
+
+  type getFileListParams = {
+    appId: number
+    directory?: string
+    recursive?: boolean
+  }
+
+  type getFileTreeParams = {
+    appId: number
   }
 
   type getFixErrorParams = {

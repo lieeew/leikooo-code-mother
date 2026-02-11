@@ -190,64 +190,82 @@
             </a-button>
           </div>
         </div>
-        <div class="preview-content">
-          <!-- 版本边栏 -->
-          <div class="version-sidebar">
-          <div class="version-sidebar-header">版本历史</div>
-          <div
-            v-for="version in versions"
-            :key="version.id"
-            class="version-item"
-            :class="{
-              'version-success': version.status === AppVersionStatusEnum.SUCCESS,
-              'version-fixing': version.status === AppVersionStatusEnum.NEED_FIX,
-              'version-building': [AppVersionStatusEnum.SOURCE_BUILDING, AppVersionStatusEnum.BUILDING].includes(version.status as AppVersionStatusEnum),
-            }"
-          >
-            <div class="version-main">
-              <span class="version-icon">
-                <CheckCircleOutlined v-if="version.status === AppVersionStatusEnum.SUCCESS" />
-                <SyncOutlined v-else-if="[AppVersionStatusEnum.SOURCE_BUILDING, AppVersionStatusEnum.BUILDING].includes(version.status as AppVersionStatusEnum)" class="version-loading" />
-                <WarningOutlined v-else-if="version.status === AppVersionStatusEnum.NEED_FIX" />
-              </span>
-              <span class="version-label">v{{ version.versionNum }}</span>
-            </div>
-            <div class="version-actions">
-              <a-button
-                v-if="version.status === AppVersionStatusEnum.NEED_FIX && isOwner && versions[versions.length - 1]?.id === version.id"
-                type="text"
-                size="small"
-                danger
-                @click.stop="fixError"
-              >
-                修复
-              </a-button>
-              <a-button
-                v-if="version.status === AppVersionStatusEnum.SUCCESS && isOwner && versions[versions.length - 1]?.id !== version.id"
-                type="text"
-                size="small"
-                @click.stop="rollbackVersion(version.versionNum || 0)"
-              >
-                回滚
-              </a-button>
-            </div>
+        <!-- 预览和版本历史容器 -->
+        <div class="preview-container">
+          <div class="preview-content">
+            <a-tabs v-model:activeKey="activePreviewTab" class="preview-tabs">
+              <a-tab-pane key="preview" tab="网页预览">
+                <div v-if="!previewUrl && !isGenerating" class="preview-placeholder">
+                  <div class="placeholder-icon">🌐</div>
+                  <p>网站文件生成完成后将在这里展示</p>
+                </div>
+                <div v-else-if="isGenerating" class="preview-loading">
+                  <a-spin size="large" />
+                  <p>正在生成网站...</p>
+                </div>
+                <iframe
+                  v-else
+                  :src="previewUrl"
+                  class="preview-iframe"
+                  frameborder="0"
+                  @load="onIframeLoad"
+                ></iframe>
+              </a-tab-pane>
+              <a-tab-pane key="code" tab="代码预览">
+                <CodePreviewPanel
+                  :file-tree="fileTree"
+                  :file-content="fileContent"
+                  :selected-file-path="selectedFilePath"
+                  :loading-file-tree="loadingFileTree"
+                  :loading-file-content="loadingFileContent"
+                  @select-file="handleFileSelected"
+                  @refresh-tree="refreshFileTree"
+                />
+              </a-tab-pane>
+            </a-tabs>
           </div>
+        </div>
+      </div>
+      <!-- 版本历史侧边栏 -->
+      <div class="version-sidebar">
+        <div class="version-sidebar-header">版本历史</div>
+        <div
+          v-for="version in versions"
+          :key="version.id"
+          class="version-item"
+          :class="{
+            'version-success': version.status === AppVersionStatusEnum.SUCCESS,
+            'version-fixing': version.status === AppVersionStatusEnum.NEED_FIX,
+            'version-building': [AppVersionStatusEnum.SOURCE_BUILDING, AppVersionStatusEnum.BUILDING].includes(version.status as AppVersionStatusEnum),
+          }"
+        >
+          <div class="version-main">
+            <span class="version-icon">
+              <CheckCircleOutlined v-if="version.status === AppVersionStatusEnum.SUCCESS" />
+              <SyncOutlined v-else-if="[AppVersionStatusEnum.SOURCE_BUILDING, AppVersionStatusEnum.BUILDING].includes(version.status as AppVersionStatusEnum)" class="version-loading" />
+              <WarningOutlined v-else-if="version.status === AppVersionStatusEnum.NEED_FIX" />
+            </span>
+            <span class="version-label">v{{ version.versionNum }}</span>
           </div>
-          <div v-if="!previewUrl && !isGenerating" class="preview-placeholder">
-            <div class="placeholder-icon">🌐</div>
-            <p>网站文件生成完成后将在这里展示</p>
+          <div class="version-actions">
+            <a-button
+              v-if="version.status === AppVersionStatusEnum.NEED_FIX && isOwner && versions[versions.length - 1]?.id === version.id"
+              type="text"
+              size="small"
+              danger
+              @click.stop="fixError"
+            >
+              修复
+            </a-button>
+            <a-button
+              v-if="version.status === AppVersionStatusEnum.SUCCESS && isOwner && versions[versions.length - 1]?.id !== version.id"
+              type="text"
+              size="small"
+              @click.stop="rollbackVersion(version.versionNum || 0)"
+            >
+              回滚
+            </a-button>
           </div>
-          <div v-else-if="isGenerating" class="preview-loading">
-            <a-spin size="large" />
-            <p>正在生成网站...</p>
-          </div>
-          <iframe
-            v-else
-            :src="previewUrl"
-            class="preview-iframe"
-            frameborder="0"
-            @load="onIframeLoad"
-          ></iframe>
         </div>
       </div>
     </div>
@@ -275,7 +293,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useLoginUserStore } from '@/stores/loginUser'
-import { cancelGeneration, getAppVo, getFixError } from '@/api/appController'
+import { cancelGeneration, getAppVo, getFixError, getFileTree, getFileContent } from '@/api/appController'
 import { listAppChatHistory } from '@/api/chatHistoryController'
 import { listVersions, rollback } from '@/api/appVersionController'
 import { AppVersionStatusEnum } from '@/constants/appVersion'
@@ -285,6 +303,7 @@ import request from '@/request'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import AppDetailModal from '@/components/AppDetailModal.vue'
 import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
+import CodePreviewPanel from '@/components/CodePreviewPanel.vue'
 import aiAvatar from '@/assets/aiAvatar.png'
 import { API_BASE_URL, getStaticPreviewUrl } from '@/config/env'
 import { type ElementInfo, VisualEditor } from '@/utils/visualEditor'
@@ -345,6 +364,15 @@ const downloading = ref(false)
 // 版本相关
 const versions = ref<API.AppVersionVO[]>([])
 const isFixing = ref(false)
+
+// 代码预览相关
+const activePreviewTab = ref('preview') // 'preview' | 'code'
+const fileTree = ref<API.FileTreeNodeVO | null>(null)
+const selectedFilePath = ref('')
+const fileContent = ref<API.FileContentVO | null>(null)
+const loadingFileTree = ref(false)
+const loadingFileContent = ref(false)
+const fileCache = new Map<string, API.FileContentVO>()
 
 // 可视化编辑相关
 const isEditMode = ref(false)
@@ -468,6 +496,67 @@ const handleVersionClick = async (version: API.AppVersionVO) => {
   }
 }
 
+// 获取文件树
+const fetchFileTree = async () => {
+  if (!appId.value || loadingFileTree.value) return
+  loadingFileTree.value = true
+  try {
+    const res = await getFileTree({ appId: appId.value })
+    if (res.data.code === 0 && res.data.data) {
+      fileTree.value = res.data.data
+    } else {
+      message.error('获取文件树失败')
+    }
+  } catch (error) {
+    console.error('获取文件树失败：', error)
+    message.error('获取文件树失败')
+  } finally {
+    loadingFileTree.value = false
+  }
+}
+
+// 获取文件内容
+const fetchFileContent = async (filePath: string) => {
+  if (!appId.value || loadingFileContent.value) return
+
+  // 检查缓存
+  if (fileCache.has(filePath)) {
+    fileContent.value = fileCache.get(filePath) || null
+    selectedFilePath.value = filePath
+    return
+  }
+
+  loadingFileContent.value = true
+  try {
+    const res = await getFileContent({ appId: appId.value, filePath })
+    if (res.data.code === 0 && res.data.data) {
+      fileContent.value = res.data.data
+      fileCache.set(filePath, res.data.data)
+      selectedFilePath.value = filePath
+    } else {
+      message.error('获取文件内容失败')
+    }
+  } catch (error) {
+    console.error('获取文件内容失败：', error)
+    message.error('获取文件内容失败')
+  } finally {
+    loadingFileContent.value = false
+  }
+}
+
+// 处理文件选择
+const handleFileSelected = (filePath: string) => {
+  fetchFileContent(filePath)
+}
+
+// 刷新文件树
+const refreshFileTree = () => {
+  fileCache.clear()
+  selectedFilePath.value = ''
+  fileContent.value = null
+  fetchFileTree()
+}
+
 // 回滚版本
 const rollbackVersion = async (versionNum: number) => {
   if (!appId.value) return
@@ -504,6 +593,8 @@ const fetchAppInfo = async () => {
 
       // 获取版本列表
       await fetchVersions()
+      // 获取文件树
+      await fetchFileTree()
       // 先加载对话历史
       await loadChatHistory()
       // 如果有至少2条对话记录，展示对应的网站
@@ -783,26 +874,7 @@ const deployApp = async () => {
     message.error('应用ID不存在')
     return
   }
-
-  deploying.value = true
-  try {
-    const res = await deployAppApi({
-      appId: appId.value as unknown as number,
-    })
-
-    if (res.data.code === 0 && res.data.data) {
-      deployUrl.value = res.data.data
-      deployModalVisible.value = true
-      message.success('部署成功')
-    } else {
-      message.error('部署失败：' + res.data.message)
-    }
-  } catch (error) {
-    console.error('部署失败：', error)
-    message.error('部署失败，请重试')
-  } finally {
-    deploying.value = false
-  }
+  message.info('部署功能开发中...')
 }
 
 // 在新窗口打开预览
@@ -839,20 +911,7 @@ const editApp = () => {
 // 删除应用
 const deleteApp = async () => {
   if (!appInfo.value?.id) return
-
-  try {
-    const res = await deleteAppApi({ id: appInfo.value.id })
-    if (res.data.code === 0) {
-      message.success('删除成功')
-      appDetailVisible.value = false
-      router.push('/')
-    } else {
-      message.error('删除失败：' + res.data.message)
-    }
-  } catch (error) {
-    console.error('删除失败：', error)
-    message.error('删除失败')
-  }
+  message.info('删除功能开发中...')
 }
 
 // 可视化编辑相关函数
@@ -976,7 +1035,7 @@ const eventSourceRef = ref<EventSource | null>(null)
 
 /* 左侧对话区域 */
 .chat-section {
-  flex: 2;
+  flex: 1;
   display: flex;
   flex-direction: column;
   background: white;
@@ -1069,26 +1128,28 @@ const eventSourceRef = ref<EventSource | null>(null)
 
 /* 右侧预览区域 */
 .preview-section {
-  flex: 3;
+  flex: 2;
   display: flex;
   flex-direction: column;
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+  min-width: 0;
 }
 
 .preview-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid #e8e8e8;
+  flex-shrink: 0;
 }
 
 .preview-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -1097,10 +1158,52 @@ const eventSourceRef = ref<EventSource | null>(null)
   gap: 8px;
 }
 
+/* 预览容器 - 撑满剩余空间 */
+.preview-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .preview-content {
   flex: 1;
-  position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+}
+
+.preview-tabs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.preview-tabs :deep(.ant-tabs-nav) {
+  margin-bottom: 0;
+  flex-shrink: 0;
+  padding: 0 16px;
+}
+
+.preview-tabs :deep(.ant-tabs-content) {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+}
+
+.preview-tabs :deep(.ant-tabs-tabpane) {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.preview-tabs :deep(.ant-tabs-tabpane > div) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .preview-placeholder {
@@ -1109,7 +1212,7 @@ const eventSourceRef = ref<EventSource | null>(null)
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #666;
+  color: #999;
 }
 
 .placeholder-icon {
@@ -1123,7 +1226,7 @@ const eventSourceRef = ref<EventSource | null>(null)
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #666;
+  color: #999;
 }
 
 .preview-loading p {
@@ -1131,9 +1234,11 @@ const eventSourceRef = ref<EventSource | null>(null)
 }
 
 .preview-iframe {
-  width: calc(100% - 200px);
+  flex: 1;
+  width: 100%;
   height: 100%;
   border: none;
+  min-height: 0;
 }
 
 .selected-element-alert {
@@ -1142,17 +1247,12 @@ const eventSourceRef = ref<EventSource | null>(null)
 
 /* 版本边栏 */
 .version-sidebar {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 200px;
-  height: 100%;
+  width: 120px;
   background: #f3f3f3;
   border-left: 1px solid #e5e5e5;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  z-index: 10;
 }
 
 /* 边栏标题 */
@@ -1251,15 +1351,7 @@ const eventSourceRef = ref<EventSource | null>(null)
 /* 响应式设计 */
 @media (max-width: 1440px) {
   .version-sidebar {
-    width: 150px;
-  }
-  
-  .preview-iframe {
-    width: calc(100% - 150px);
-  }
-  
-  .version-label {
-    font-size: 12px;
+    width: 100px;
   }
 }
 
@@ -1272,26 +1364,6 @@ const eventSourceRef = ref<EventSource | null>(null)
   .preview-section {
     flex: none;
     height: 50vh;
-  }
-  
-  .version-sidebar {
-    width: 60px;
-  }
-  
-  .preview-iframe {
-    width: calc(100% - 60px);
-  }
-  
-  .version-sidebar-header {
-    display: none;
-  }
-  
-  .version-label {
-    display: none;
-  }
-  
-  .version-actions {
-    display: none;
   }
 }
 
