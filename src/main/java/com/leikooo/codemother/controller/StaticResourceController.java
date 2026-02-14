@@ -34,7 +34,7 @@ public class StaticResourceController {
             "jpg", IMAGE_JPEG_VALUE
     );
 
-    private static final String PATH = ResourcePathConstant.ROOT_PATH;
+    private static final String PATH = ResourcePathConstant.GENERATED_APPS_DIR;
 
     @GetMapping("/{deployKey}/**")
     public ResponseEntity<Resource> serveStaticResource(
@@ -51,7 +51,7 @@ public class StaticResourceController {
         if ("/".equals(resourcePath)) {
             resourcePath = File.separator + "index.html";
         }
-        String finalPath = PATH + File.separator + deployKey + resourcePath;
+        String finalPath = PATH + File.separator + deployKey + File.separator + "current" + resourcePath;
         File file = new File(finalPath);
         if (!file.exists()) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);

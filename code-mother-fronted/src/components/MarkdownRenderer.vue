@@ -8,7 +8,7 @@ import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 
 // 引入代码高亮样式
-import 'highlight.js/styles/github.css'
+import 'highlight.js/styles/github-dark.css'
 
 interface Props {
   content: string
@@ -110,8 +110,6 @@ const renderedMarkdown = computed(() => {
 }
 
 .markdown-content :deep(pre) {
-  background-color: #f8f8f8;
-  border: 1px solid #e1e1e1;
   border-radius: 6px;
   padding: 1em;
   overflow-x: auto;
@@ -172,7 +170,6 @@ const renderedMarkdown = computed(() => {
 
 /* 代码高亮样式优化 */
 .markdown-content :deep(.hljs) {
-  background-color: #f8f8f8 !important;
   border-radius: 6px;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 0.9em;

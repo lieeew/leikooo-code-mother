@@ -181,7 +181,9 @@ public class FileTools extends BaseTools {
             result.append("```");
 
             if (end < allLines.size()) {
-                result.append(String.format("%n... 还有 %d 行未显示 (总行数: %d)%n", allLines.size() - end, allLines.size()));
+                result.append(String.format(
+                    "%n... 还有 %d 行未显示 (总行数: %d)，使用 offset=%d 继续读取%n",
+                    allLines.size() - end, allLines.size(), end));
             }
 
             return result.toString();

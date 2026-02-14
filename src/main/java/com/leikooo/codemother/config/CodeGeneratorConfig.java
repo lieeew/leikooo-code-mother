@@ -1,5 +1,6 @@
 package com.leikooo.codemother.config;
 
+import com.leikooo.codemother.constant.ResourcePathConstant;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -14,7 +15,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "app.code-generator")
 public class CodeGeneratorConfig {
 
-    private String outputDir = "generated-apps";
+    private String outputDir = ResourcePathConstant.GENERATED_APPS_DIR;
 
     private long maxFileSize = 10 * 1024 * 1024;
 }

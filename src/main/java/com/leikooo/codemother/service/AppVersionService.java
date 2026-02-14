@@ -35,12 +35,6 @@ public interface AppVersionService extends IService<AppVersion> {
     AppVersion getByVersionNum(Long appId, Integer versionNum);
 
     /**
-     * 初始化 v0 版本（首次创建 App 时调用）
-     * @param appId 应用ID
-     */
-    void initVersion(Long appId);
-
-    /**
      * 回滚到指定版本
      * @param appId 应用ID
      * @param versionNum 版本号

@@ -2,11 +2,14 @@
 package com.leikooo.codemother.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.leikooo.codemother.ai.AiChatClient;
 import com.leikooo.codemother.ai.GenerationManager;
+import com.leikooo.codemother.constant.ResourcePathConstant;
+import com.leikooo.codemother.event.AppCreatedEvent;
 import com.leikooo.codemother.exception.BusinessException;
 import com.leikooo.codemother.exception.ErrorCode;
 import com.leikooo.codemother.exception.ThrowUtils;
@@ -15,7 +18,7 @@ import com.leikooo.codemother.model.dto.AppQueryDto;
 import com.leikooo.codemother.model.dto.CreatAppDto;
 import com.leikooo.codemother.model.dto.GenAppDto;
 import com.leikooo.codemother.model.entity.App;
-import com.leikooo.codemother.model.entity.ObservableRecord;
+import com.leikooo.codemother.model.entity.AppVersion;
 import com.leikooo.codemother.model.entity.User;
 import com.leikooo.codemother.model.enums.ChatHistoryMessageTypeEnum;
 import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
@@ -24,15 +27,20 @@ import com.leikooo.codemother.model.vo.AppVO;
 import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.service.*;
 import com.leikooo.codemother.utils.UuidV7Generator;
+import com.leikooo.codemother.utils.VueBuildUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
 /**
  * @author leikooo
@@ -50,16 +58,19 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
     private final ObservableRecordService observableRecordService;
     private final AppVersionService appVersionService;
     private final ChatHistoryService chatHistoryService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AppServiceImpl(AiChatClient aiChatClient, UserService userService,
                           GenerationManager generationManager, ObservableRecordService observableRecordService,
-                          @Lazy AppVersionService appVersionService, ChatHistoryService chatHistoryService) {
+                          @Lazy AppVersionService appVersionService, ChatHistoryService chatHistoryService,
+                          ApplicationEventPublisher eventPublisher) {
         this.aiChatClient = aiChatClient;
         this.userService = userService;
         this.generationManager = generationManager;
         this.observableRecordService = observableRecordService;
         this.appVersionService = appVersionService;
         this.chatHistoryService = chatHistoryService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -76,6 +87,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
             CodeGenTypeEnum codeGenTypeEnum = aiChatClient.selectGenTypeEnum(initPrompt, app.getId(), loginUser.getId());
             app.setCodeGenType(codeGenTypeEnum.getValue());
             ThrowUtils.throwIf(!this.updateById(app), ErrorCode.SYSTEM_ERROR);
+            eventPublisher.publishEvent(new AppCreatedEvent(this, id, initPrompt));
             return id;
         }
     }
@@ -175,6 +187,73 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
             appVO.setTotalOutputTokens(stats.getTotalTokens());
             appVO.setTotalConsumeTime(stats.getAvgDurationMs());
         }
+    }
+
+    @Override
+    public String deployApp(Long appId) {
+        ThrowUtils.throwIf(Objects.isNull(appId), ErrorCode.PARAMS_ERROR);
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+
+        if (StrUtil.isNotBlank(app.getDeployKey())) {
+            log.info("[Deploy] 应用已部署，直接返回 deployKey: appId={}, deployKey={}", appId, app.getDeployKey());
+            return app.getDeployKey();
+        }
+
+        Integer currentVersionNum = app.getCurrentVersionNum();
+        ThrowUtils.throwIf(currentVersionNum == null || currentVersionNum <= 0,
+                ErrorCode.OPERATION_ERROR, "当前版本不存在或未生成代码");
+        AppVersion version = appVersionService.getByVersionNum(appId, currentVersionNum);
+        ThrowUtils.throwIf(version == null, ErrorCode.NOT_FOUND_ERROR, "版本不存在");
+
+        String deployKey = RandomUtil.randomString(6).toUpperCase();
+        String currentPath = ResourcePathConstant.GENERATED_APPS_DIR + "/" + appId + "/current";
+        String deployPath = ResourcePathConstant.DEPLOY_DIR + "/" + deployKey;
+
+        boolean isVue = CodeGenTypeEnum.VUE_PROJECT.getValue().equals(app.getCodeGenType());
+        try {
+            if (isVue) {
+                VueBuildUtils.BuildResult buildResult = VueBuildUtils.buildVueProject(currentPath);
+                ThrowUtils.throwIf(!buildResult.success(), ErrorCode.OPERATION_ERROR, "Vue 项目构建失败");
+                String distPath = currentPath + "/dist";
+                copyDirectory(distPath, deployPath);
+            } else {
+                copyDirectory(currentPath, deployPath);
+            }
+        } catch (IOException e) {
+            log.error("[Deploy] 部署失败: appId={}", appId, e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "部署失败: " + e.getMessage());
+        }
+
+        app.setDeployKey(deployKey);
+        boolean updated = this.lambdaUpdate()
+                .eq(App::getId, appId)
+                .set(App::getDeployKey, deployKey)
+                .update();
+        ThrowUtils.throwIf(!updated, ErrorCode.SYSTEM_ERROR, "保存部署密钥失败");
+
+        log.info("[Deploy] 部署成功: appId={}, deployKey={}", appId, deployKey);
+        return deployKey;
+    }
+
+    private void copyDirectory(String source, String target) throws IOException {
+        Path sourcePath = Paths.get(source);
+        Path targetPath = Paths.get(target);
+        Files.walkFileTree(sourcePath, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                Path targetDir = targetPath.resolve(sourcePath.relativize(dir));
+                Files.createDirectories(targetDir);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Path targetFile = targetPath.resolve(sourcePath.relativize(file));
+                Files.copy(file, targetFile, StandardCopyOption.REPLACE_EXISTING);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
 }

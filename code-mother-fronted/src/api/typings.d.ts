@@ -22,6 +22,10 @@ declare namespace API {
     priority?: number
   }
 
+  type AppDeployRequest = {
+    appId?: number
+  }
+
   type AppQueryRequest = {
     current?: number
     pageSize?: number
@@ -83,6 +87,7 @@ declare namespace API {
     totalOutputTokens?: number
     totalConsumeTime?: number
     user?: UserVO
+    currentVersionNum?: number
   }
 
   type BaseResponseAppStatisticsVO = {

@@ -1,5 +1,6 @@
 package com.leikooo.codemother.utils;
 
+import com.leikooo.codemother.constant.ResourcePathConstant;
 import com.leikooo.codemother.exception.BusinessException;
 import com.leikooo.codemother.exception.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
@@ -79,12 +80,13 @@ public class VueBuildUtils {
 
     /**
      * 从绝对路径中提取相对路径前缀
-     * 如: K:/Job-Coding/code-mother/generated-apps/xxx/current -> generated-apps/xxx/current
+     * 如: K:/Job-Coding/code-mother/temp/generated-apps/xxx/current -> temp/generated-apps/xxx/current
      */
     private static String extractRelativePrefix(String projectPath) {
         String normalized = projectPath.replace("\\", "/");
-        int idx = normalized.lastIndexOf("generated-apps/");
-        return idx >= 0 ? normalized.substring(idx) : "generated-apps";
+        String targetDir = ResourcePathConstant.GENERATED_APPS_DIR + "/";
+        int idx = normalized.lastIndexOf(targetDir);
+        return idx >= 0 ? normalized.substring(idx) : ResourcePathConstant.GENERATED_APPS_DIR;
     }
 
     private static void checkNodeAvailable() {

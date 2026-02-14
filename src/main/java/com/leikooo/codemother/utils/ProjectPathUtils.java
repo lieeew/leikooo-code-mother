@@ -12,6 +12,6 @@ import java.io.File;
 public class ProjectPathUtils {
 
     public static String getProjectPath(String appId) {
-        return ResourcePathConstant.ROOT_PATH + File.separator + appId + File.separator + "current";
+        return ResourcePathConstant.GENERATED_APPS_DIR + File.separator + appId + File.separator + "current";
     }
 }

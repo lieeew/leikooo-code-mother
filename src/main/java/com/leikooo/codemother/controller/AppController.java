@@ -11,6 +11,7 @@ import com.leikooo.codemother.commen.BaseResponse;
 import com.leikooo.codemother.commen.DeleteRequest;
 import com.leikooo.codemother.commen.ResultUtils;
 import com.leikooo.codemother.constant.AppConstant;
+import com.leikooo.codemother.constant.ResourcePathConstant;
 import com.leikooo.codemother.constant.UserConstant;
 import com.leikooo.codemother.exception.BusinessException;
 import com.leikooo.codemother.exception.ErrorCode;
@@ -18,10 +19,7 @@ import com.leikooo.codemother.exception.ThrowUtils;
 import com.leikooo.codemother.model.dto.AppQueryDto;
 import com.leikooo.codemother.model.dto.CreatAppDto;
 import com.leikooo.codemother.model.dto.GenAppDto;
-import com.leikooo.codemother.model.dto.request.app.AppAdminUpdateRequest;
-import com.leikooo.codemother.model.dto.request.app.AppQueryRequest;
-import com.leikooo.codemother.model.dto.request.app.AppUpdateRequest;
-import com.leikooo.codemother.model.dto.request.app.CreatAppRequest;
+import com.leikooo.codemother.model.dto.request.app.*;
 import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.model.entity.AppVersion;
 import com.leikooo.codemother.model.enums.VersionStatusEnum;
@@ -295,7 +293,7 @@ public class AppController {
         ThrowUtils.throwIf(!VersionStatusEnum.NEED_FIX.name().equals(version.getStatus()),
                 ErrorCode.OPERATION_ERROR, "当前版本无需修复");
         // 读取 metadata.json 获取 errorLog
-        String versionPath = "generated-apps/" + appId + "/v" + currentVersion;
+        String versionPath = ResourcePathConstant.GENERATED_APPS_DIR + "/" + appId + "/v" + currentVersion;
         File metadataFile = new File(versionPath, "metadata.json");
         ThrowUtils.throwIf(!metadataFile.exists(), ErrorCode.SYSTEM_ERROR, "metadata.json 不存在");
         try {
@@ -330,5 +328,12 @@ public class AppController {
             @RequestParam(name = "recursive", defaultValue = "false") Boolean recursive
     ) {
         return ResultUtils.success(appSourceService.getFileList(appId, directory, recursive));
+    }
+
+    @PostMapping("/deploy")
+    public BaseResponse<String> deployApp(@RequestBody AppDeployRequest appDeployRequest) {
+        ThrowUtils.throwIf(appDeployRequest == null || appDeployRequest.getAppId() == null, ErrorCode.PARAMS_ERROR);
+        String deployKey = appService.deployApp(appDeployRequest.getAppId());
+        return ResultUtils.success(deployKey);
     }
 }

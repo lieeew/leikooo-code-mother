@@ -1,6 +1,7 @@
 package com.leikooo.codemother.ai;
 
 import com.leikooo.codemother.ai.advisor.*;
+import com.leikooo.codemother.ai.tools.ContextTools;
 import com.leikooo.codemother.ai.tools.FileTools;
 import com.leikooo.codemother.ai.tools.TodolistTools;
 import com.leikooo.codemother.model.dto.ChatContext;
@@ -37,16 +38,17 @@ public class AiChatClient {
     private final ChatModel openAiChatModel;
     private final FileTools fileTools;
 
-    public AiChatClient(ChatModel openAiChatModel, TodolistTools todolistTools, FileTools fileTools, ToolAdvisor toolAdvisor, MessageAggregatorAdvisor messageAggregatorAdvisor, BuildAdvisor buildAdvisor, ObservableRecordService observableRecordService, ToolCallRecordService toolCallRecordService, JdbcChatMemoryRepository chatMemoryRepository, VersionAdvisor versionAdvisor) {
+    public AiChatClient(ChatModel openAiChatModel, TodolistTools todolistTools, FileTools fileTools, ContextTools contextTools, ToolAdvisor toolAdvisor, MessageAggregatorAdvisor messageAggregatorAdvisor, BuildAdvisor buildAdvisor, ObservableRecordService observableRecordService, ToolCallRecordService toolCallRecordService, JdbcChatMemoryRepository chatMemoryRepository, VersionAdvisor versionAdvisor, ContextCompressionAdvisor contextCompressionAdvisor) {
         this.chatMemoryRepository = chatMemoryRepository;
         this.openAiChatModel = openAiChatModel;
         this.fileTools = fileTools;
         this.chatClient = ChatClient
                 .builder(openAiChatModel)
                 .defaultAdvisors(buildAdvisor, toolAdvisor, messageAggregatorAdvisor, versionAdvisor,
+                        contextCompressionAdvisor,
                         new SystemMessageFirstAdvisor(), new LogAdvisor(),
                         new ObservableAdvisor(observableRecordService, toolCallRecordService))
-                .defaultTools(todolistTools, fileTools)
+                .defaultTools(todolistTools, fileTools, contextTools)
                 .build();
     }
 
@@ -123,7 +125,9 @@ public class AiChatClient {
      * @return CodeGenTypeEnum
      */
     public CodeGenTypeEnum selectGenTypeEnum(String prompt, Long appId, String userId) {
-        String rawResponse = chatClient.prompt(prompt)
+        String rawResponse = ChatClient.builder(openAiChatModel)
+                .build().prompt()
+                .user(prompt)
                 .system(new ClassPathResource("prompt/codegen-routing-system-prompt.md"), UTF_8)
                 .advisors(MessageChatMemoryAdvisor
                         .builder(MessageWindowChatMemory.builder()
@@ -134,10 +138,26 @@ public class AiChatClient {
                     advisorSpec.param(GEN_APP_INFO, new ChatContext(appId.toString(), userId));
                     advisorSpec.param(CONVERSATION_ID, appId);
                 })
+                .toolContext(Map.of(CONVERSATION_ID, appId.toString(), GEN_APP_INFO, new ToolsContext(appId.toString(), userId)))
                 .call().content();
         ThinkingTagCleaner thinkingTagCleaner = new ThinkingTagCleaner();
         String normalizedResponse = normalizeEnumValue(thinkingTagCleaner.clean(rawResponse));
         return CodeGenTypeEnum.getEnumByValue(normalizedResponse);
+    }
+
+    /**
+     * 异步生成应用名称
+     *
+     * @param initPrompt 用户初始提示词
+     * @return 生成的应用名称
+     */
+    public String generateAppName(String initPrompt) {
+        String rawResponse = ChatClient.builder(openAiChatModel)
+                .build().prompt(initPrompt)
+                .system(new ClassPathResource("prompt/app-naming-prompt.md"), UTF_8)
+                .call().content();
+        ThinkingTagCleaner thinkingTagCleaner = new ThinkingTagCleaner();
+        return thinkingTagCleaner.clean(rawResponse);
     }
 
     private String normalizeEnumValue(String value) {

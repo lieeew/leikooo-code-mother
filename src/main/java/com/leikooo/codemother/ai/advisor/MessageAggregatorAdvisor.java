@@ -61,6 +61,7 @@ public class MessageAggregatorAdvisor implements CallAdvisor, StreamAdvisor {
         String appId = chatContext.appId();
         String userId = chatContext.userId();
         chatHistoryService.addChatMessage(appId, content, ChatHistoryMessageTypeEnum.AI.getValue(), userId);
+        log.info("用户 userId {} 保存 app {} 历史记录成功", userId, appId);
     }
 
     @Override

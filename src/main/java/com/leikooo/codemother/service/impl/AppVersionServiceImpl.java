@@ -4,6 +4,8 @@ import cn.hutool.core.io.FileUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leikooo.codemother.config.CosClientConfig;
+import com.leikooo.codemother.constant.ResourcePathConstant;
+import com.leikooo.codemother.event.AppCodeRegeneratedEvent;
 import com.leikooo.codemother.exception.ErrorCode;
 import com.leikooo.codemother.exception.ThrowUtils;
 import com.leikooo.codemother.manager.CosManager;
@@ -19,6 +21,8 @@ import com.leikooo.codemother.utils.VersionCache;
 import com.leikooo.codemother.utils.VueBuildUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -33,6 +37,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -46,15 +51,17 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
     private final CosClientConfig cosClientConfig;
     private final VersionCache versionCache;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AppVersionServiceImpl(CosManager cosManager, AppService appService,
                                 CosClientConfig cosClientConfig, VersionCache versionCache,
-                                ObjectMapper objectMapper) {
+                                ObjectMapper objectMapper, ApplicationEventPublisher eventPublisher) {
         this.cosManager = cosManager;
         this.appService = appService;
         this.cosClientConfig = cosClientConfig;
         this.versionCache = versionCache;
         this.objectMapper = objectMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -85,29 +92,22 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
                 .one();
     }
 
-    @Override
-    public void initVersion(Long appId) {
-        try {
-            Path v0Path = Paths.get("generated-apps", appId.toString(), "v0", "src");
-            Path currentPath = Paths.get("generated-apps", appId.toString(), "current", "src");
-            Files.createDirectories(v0Path);
-            Files.createDirectories(currentPath);
-
-            AppVersion version = AppVersion.builder()
-                    .appId(appId)
-                    .userId(getLoginUserId(appId))
-                    .versionNum(0)
-                    .fileCount(0)
-                    .fileSize(0L)
-                    .build();
-            this.save(version);
-
-            versionCache.set(appId.toString(), 0);
-            log.info("[AppVersion] 初始化 v0 和 current 完成: appId={}", appId);
+    private long calculateDirectorySize(Path path) {
+        long size = 0;
+        try (Stream<Path> walk = Files.walk(path)) {
+            size = walk.filter(Files::isRegularFile)
+                    .mapToLong(p -> {
+                        try {
+                            return Files.size(p);
+                        } catch (IOException e) {
+                            return 0L;
+                        }
+                    })
+                    .sum();
         } catch (IOException e) {
-            log.error("[AppVersion] 初始化失败: appId={}", appId, e);
-            throw new RuntimeException("初始化失败", e);
+            log.warn("[AppVersion] 计算目录大小失败: path={}, error={}", path, e.getMessage());
         }
+        return size;
     }
 
     private byte[] getLoginUserId(Long appId) {
@@ -129,10 +129,10 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         int newVersionNum = maxVersion + 1;
 
         try {
-            Path versionPath = Paths.get("generated-apps", appIdStr, "v" + newVersionNum);
+            Path versionPath = Paths.get(ResourcePathConstant.GENERATED_APPS_DIR, appIdStr, "v" + newVersionNum);
             Files.createDirectories(versionPath);
 
-            Path currentPath = Paths.get("generated-apps", appIdStr, "current");
+            Path currentPath = Paths.get(ResourcePathConstant.GENERATED_APPS_DIR, appIdStr, "current");
             if (Files.exists(currentPath)) {
                 copyDirectory(currentPath, versionPath);
             }
@@ -145,12 +145,13 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
             saveMetadata(versionPath, metadata);
 
             int fileCount = countFiles(versionPath);
+            long fileSize = calculateDirectorySize(versionPath);
             AppVersion version = AppVersion.builder()
                     .appId(appId)
                     .userId(getLoginUserId(appId))
                     .versionNum(newVersionNum)
                     .fileCount(fileCount)
-                    .fileSize(0L)
+                    .fileSize(fileSize)
                     .build();
             this.save(version);
 
@@ -161,6 +162,9 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
 
             versionCache.set(appIdStr, newVersionNum);
             log.info("[AppVersion] 保存版本完成: appId={}, version=v{}", appId, newVersionNum);
+
+            eventPublisher.publishEvent(new AppCodeRegeneratedEvent(this, appId));
+
             return newVersionNum;
 
         } catch (IOException e) {
@@ -183,7 +187,7 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
             VueBuildUtils.BuildResult buildResult = VueBuildUtils.buildVueProject(projectPath, appIdStr);
             BuildResultEnum buildResultEnum = BuildResultEnum.fromExitCode(buildResult.exitCode());
 
-            Path versionPath = Paths.get("generated-apps", appIdStr, "v" + versionNum);
+            Path versionPath = Paths.get(ResourcePathConstant.GENERATED_APPS_DIR, appIdStr, "v" + versionNum);
             Path metadataPath = versionPath.resolve("metadata.json");
             if (Files.exists(metadataPath)) {
                 Map<String, Object> metadata = objectMapper.readValue(metadataPath.toFile(), Map.class);
@@ -213,10 +217,11 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         }
     }
 
+    @Async("rollbackExecutor")
     @Override
     public void rollback(Long appId, Integer versionNum) {
-        Path currentPath = Paths.get("generated-apps", appId.toString(), "current");
-        Path versionPath = Paths.get("generated-apps", appId.toString(), "v" + versionNum);
+        Path currentPath = Paths.get(ResourcePathConstant.GENERATED_APPS_DIR, appId.toString(), "current");
+        Path versionPath = Paths.get(ResourcePathConstant.GENERATED_APPS_DIR, appId.toString(), "v" + versionNum);
 
         try {
             if (Files.exists(currentPath)) {
@@ -225,11 +230,19 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
 
             if (Files.exists(versionPath)) {
                 copyDirectoryExclude(versionPath, currentPath, "metadata.json");
+                appService.lambdaUpdate()
+                        .eq(App::getId, appId)
+                        .set(App::getCurrentVersionNum, versionNum)
+                        .update();
                 log.info("[Rollback] 本地回滚成功: appId={}, version=v{}", appId, versionNum);
             } else {
                 AppVersion version = getByVersionNum(appId, versionNum);
                 ThrowUtils.throwIf(version == null, ErrorCode.NOT_FOUND_ERROR, "版本不存在");
                 downloadAndExtract(version.getFileUrl(), currentPath.toString());
+                appService.lambdaUpdate()
+                        .eq(App::getId, appId)
+                        .set(App::getCurrentVersionNum, versionNum)
+                        .update();
                 log.info("[Rollback] COS 回滚成功: appId={}, version=v{}", appId, versionNum);
             }
             VueBuildUtils.buildVueProject(currentPath.toString());

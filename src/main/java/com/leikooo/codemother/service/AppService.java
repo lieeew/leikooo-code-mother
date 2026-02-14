@@ -52,4 +52,11 @@ public interface AppService extends IService<App> {
      * @return lists
      */
     List<AppVO> getAppVOList(List<App> appPage);
+
+    /**
+     * 部署应用
+     * @param appId appId
+     * @return deployKey
+     */
+    String deployApp(Long appId);
 }

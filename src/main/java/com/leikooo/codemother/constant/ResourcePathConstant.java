@@ -7,5 +7,6 @@ package com.leikooo.codemother.constant;
  */
 public interface ResourcePathConstant {
 
-    String ROOT_PATH = "generated-apps";
+    String GENERATED_APPS_DIR = System.getProperty("user.dir") + "/temp/generated-apps";
+    String DEPLOY_DIR = System.getProperty("user.dir") + "/temp/deploy";
 }

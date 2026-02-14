@@ -82,6 +82,11 @@ public class AppVO implements Serializable {
      */
     private UserVO user;
 
+    /**
+     * 当前版本
+     */
+    private Integer currentVersionNum;
+
     private static final long serialVersionUID = 1L;
 
     public static AppVO toVO(App app, UserVO userVO) {

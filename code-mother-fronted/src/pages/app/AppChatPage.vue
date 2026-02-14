@@ -60,7 +60,7 @@
               加载更多历史消息
             </a-button>
           </div>
-          <div v-for="(message, index) in messages" :key="index" class="message-item">
+          <div v-for="message in messages" :key="message.id" class="message-item">
             <div v-if="message.type === 'user'" class="user-message">
               <div class="message-content">{{ message.content }}</div>
               <div class="message-avatar">
@@ -193,15 +193,15 @@
         <!-- 预览和版本历史容器 -->
         <div class="preview-container">
           <div class="preview-content">
-            <a-tabs v-model:activeKey="activePreviewTab" class="preview-tabs">
+            <a-tabs v-model:activeKey="activePreviewTab" class="preview-tabs" @change="onPreviewTabChange">
               <a-tab-pane key="preview" tab="网页预览">
                 <div v-if="!previewUrl && !isGenerating" class="preview-placeholder">
                   <div class="placeholder-icon">🌐</div>
                   <p>网站文件生成完成后将在这里展示</p>
                 </div>
-                <div v-else-if="isGenerating" class="preview-loading">
+                <div v-else-if="isGenerating || rollingBack" class="preview-loading">
                   <a-spin size="large" />
-                  <p>正在生成网站...</p>
+                  <p>{{ rollingBack ? '正在回滚版本...' : '正在生成网站...' }}</p>
                 </div>
                 <iframe
                   v-else
@@ -237,6 +237,7 @@
             'version-success': version.status === AppVersionStatusEnum.SUCCESS,
             'version-fixing': version.status === AppVersionStatusEnum.NEED_FIX,
             'version-building': [AppVersionStatusEnum.SOURCE_BUILDING, AppVersionStatusEnum.BUILDING].includes(version.status as AppVersionStatusEnum),
+            'version-current': version.versionNum === appInfo?.currentVersionNum,
           }"
         >
           <div class="version-main">
@@ -258,9 +259,10 @@
               修复
             </a-button>
             <a-button
-              v-if="version.status === AppVersionStatusEnum.SUCCESS && isOwner && versions[versions.length - 1]?.id !== version.id"
+              v-if="version.status === AppVersionStatusEnum.SUCCESS && isOwner && version.versionNum !== appInfo?.currentVersionNum"
               type="text"
               size="small"
+              :disabled="rollingBack"
               @click.stop="rollbackVersion(version.versionNum || 0)"
             >
               回滚
@@ -293,7 +295,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useLoginUserStore } from '@/stores/loginUser'
-import { cancelGeneration, getAppVo, getFixError, getFileTree, getFileContent } from '@/api/appController'
+import { cancelGeneration, getAppVo, getFixError, getFileTree, getFileContent, deployApp as deployAppApi } from '@/api/appController'
 import { listAppChatHistory } from '@/api/chatHistoryController'
 import { listVersions, rollback } from '@/api/appVersionController'
 import { AppVersionStatusEnum } from '@/constants/appVersion'
@@ -305,7 +307,7 @@ import AppDetailModal from '@/components/AppDetailModal.vue'
 import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
 import CodePreviewPanel from '@/components/CodePreviewPanel.vue'
 import aiAvatar from '@/assets/aiAvatar.png'
-import { API_BASE_URL, getStaticPreviewUrl } from '@/config/env'
+import { API_BASE_URL, getStaticPreviewUrl, getDeployUrl } from '@/config/env'
 import { type ElementInfo, VisualEditor } from '@/utils/visualEditor'
 
 import {
@@ -332,6 +334,7 @@ const appId = ref<any>()
 
 // 对话相关
 interface Message {
+  id?: number
   type: 'user' | 'ai'
   content: string
   loading?: boolean
@@ -364,6 +367,7 @@ const downloading = ref(false)
 // 版本相关
 const versions = ref<API.AppVersionVO[]>([])
 const isFixing = ref(false)
+const rollingBack = ref(false)
 
 // 代码预览相关
 const activePreviewTab = ref('preview') // 'preview' | 'code'
@@ -431,6 +435,8 @@ const loadChatHistory = async (isLoadMore = false) => {
         } else {
           // 初始加载，直接设置消息列表
           messages.value = historyMessages
+          // 初始加载后滚动到底部，显示最新消息
+          nextTick(() => scrollToBottom())
         }
         // 更新游标
         lastCreateTime.value = chatHistories[chatHistories.length - 1]?.createTime
@@ -559,19 +565,40 @@ const refreshFileTree = () => {
 
 // 回滚版本
 const rollbackVersion = async (versionNum: number) => {
-  if (!appId.value) return
+  if (!appId.value || rollingBack.value) return
+  
+  rollingBack.value = true
   try {
     const res = await rollback({ appId: appId.value, versionNum })
     if (res.data.code === 0 && res.data.data) {
       message.success('回滚成功')
+      // 轮询检查 currentVersionNum 是否匹配
+      for (let i = 0; i < 10; i++) {
+        await fetchAppInfo()
+        if (appInfo.value?.currentVersionNum === versionNum) {
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
       await fetchVersions()
-      updatePreview()
+      await updatePreview()
+      // 轮询检查预览URL是否可用
+      for (let i = 0; i < 30; i++) {
+        const isAvailable = await checkPreviewUrlAvailable(previewUrl.value)
+        if (isAvailable) {
+          previewReady.value = true
+          break
+        }
+        previewReady.value = false
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+      }
     } else {
       message.error('回滚失败：' + res.data.message)
     }
   } catch (error) {
     console.error('回滚失败：', error)
-    message.error('回滚失败')
+  } finally {
+    rollingBack.value = false
   }
 }
 
@@ -593,8 +620,6 @@ const fetchAppInfo = async () => {
 
       // 获取版本列表
       await fetchVersions()
-      // 获取文件树
-      await fetchFileTree()
       // 先加载对话历史
       await loadChatHistory()
       // 如果有至少2条对话记录，展示对应的网站
@@ -748,15 +773,28 @@ const generateCode = async (userMessage: string, aiMessageIndex: number) => {
       if (streamCompleted) return
 
       streamCompleted = true
-      isGenerating.value = false
       eventSource?.close()
 
-      // 延迟更新预览，确保后端已完成处理
-      setTimeout(async () => {
-        await fetchAppInfo()
-        updatePreview()
-      }, 1000)
+      // 轮询检查最新版本状态，直到 status 不为 null
+      pollVersionStatus()
     })
+
+    // 轮询检查版本状态
+    const pollVersionStatus = async (maxRetries = 10, interval = 1000) => {
+      for (let i = 0; i < maxRetries; i++) {
+        await fetchVersions()
+        const latestVersion = versions.value[versions.value.length - 1]
+        if (latestVersion?.status !== null && latestVersion?.status !== undefined) {
+          await fetchAppInfo()
+          isGenerating.value = false
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, interval))
+      }
+      // 达到最大重试次数后仍然执行
+      await fetchAppInfo()
+      isGenerating.value = false
+    }
 
     // 处理business-error事件（后端限流等错误）
     eventSource.addEventListener('business-error', function (event: MessageEvent) {
@@ -819,7 +857,17 @@ const updatePreview = () => {
     const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
     const newPreviewUrl = getStaticPreviewUrl(codeGenType, appId.value)
     previewUrl.value = newPreviewUrl
-    previewReady.value = true
+    previewReady.value = false
+  }
+}
+
+// 检查预览URL是否可用
+const checkPreviewUrlAvailable = async (url: string): Promise<boolean> => {
+  try {
+    const response = await fetch(url, { method: 'GET' })
+    return response.ok
+  } catch {
+    return false
   }
 }
 
@@ -874,7 +922,23 @@ const deployApp = async () => {
     message.error('应用ID不存在')
     return
   }
-  message.info('部署功能开发中...')
+
+  deploying.value = true
+  try {
+    const res = await deployAppApi({ appId: appId.value })
+    if (res.data.code === 0 && res.data.data) {
+      deployUrl.value = getDeployUrl(res.data.data)
+      deployModalVisible.value = true
+      message.success('部署成功')
+    } else {
+      message.error(res.data.message || '部署失败')
+    }
+  } catch (error) {
+    console.error('部署失败：', error)
+    message.error('部署失败，请重试')
+  } finally {
+    deploying.value = false
+  }
 }
 
 // 在新窗口打开预览
@@ -983,6 +1047,13 @@ const cancel = async () => {
 }
 
 const eventSourceRef = ref<EventSource | null>(null)
+
+// 监听 tab 切换
+const onPreviewTabChange = async (key: string) => {
+  if (key === 'code' && !fileTree.value) {
+    await fetchFileTree()
+  }
+}
 </script>
 
 <style scoped>
@@ -1336,6 +1407,16 @@ const eventSourceRef = ref<EventSource | null>(null)
 
 .version-fixing:hover {
   background: #ffebeb;
+}
+
+/* 当前版本高亮 */
+.version-current {
+  background: #e6f7ff;
+  border-left-color: #1890ff;
+}
+
+.version-current:hover {
+  background: #bae7ff;
 }
 
 /* 操作按钮 */

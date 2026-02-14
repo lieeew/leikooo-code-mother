@@ -21,7 +21,7 @@ export const getDeployUrl = (deployKey: string) => {
 export const getStaticPreviewUrl = (codeGenType: string, appId: string) => {
   const baseUrl = `${STATIC_BASE_URL}/${appId}/`
   if (codeGenType === CodeGenTypeEnum.VUE_PROJECT) {
-    return `${baseUrl}current/dist/index.html`
+    return `${baseUrl}dist/index.html`
   }
   return baseUrl
 }
