@@ -3,13 +3,16 @@ package com.leikooo.codemother.service.impl;
 import com.leikooo.codemother.exception.BusinessException;
 import com.leikooo.codemother.exception.ErrorCode;
 import com.leikooo.codemother.exception.ThrowUtils;
+import com.leikooo.codemother.constant.UserConstant;
 import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.model.vo.FileContentVO;
 import com.leikooo.codemother.model.vo.FileListVO;
 import com.leikooo.codemother.model.vo.FileTreeNodeVO;
 import com.leikooo.codemother.service.AppService;
 import com.leikooo.codemother.service.AppSourceService;
+import com.leikooo.codemother.service.UserService;
 import com.leikooo.codemother.utils.ProjectPathUtils;
+import com.leikooo.codemother.utils.UuidV7Generator;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
@@ -36,9 +39,11 @@ public class AppSourceServiceImpl implements AppSourceService {
     private static final int MAX_LINES = 2000;
 
     private final AppService appService;
+    private final UserService userService;
 
-    public AppSourceServiceImpl(AppService appService) {
+    public AppSourceServiceImpl(AppService appService, UserService userService) {
         this.appService = appService;
+        this.userService = userService;
     }
 
     @Override
@@ -152,6 +157,11 @@ public class AppSourceServiceImpl implements AppSourceService {
     private Path validateAndResolvePath(Long appId, String filePath) {
         App app = appService.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        var loginUser = userService.getUserLogin();
+        byte[] userId = UuidV7Generator.stringToBytes(loginUser.getId());
+        ThrowUtils.throwIf(!Arrays.equals(app.getUserId(), userId) && !UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole()),
+                ErrorCode.NO_AUTH_ERROR,
+                "无权限访问应用源码");
 
         String projectPath = ProjectPathUtils.getProjectPath(appId.toString());
         Path basePath = Paths.get(projectPath).toAbsolutePath().normalize();

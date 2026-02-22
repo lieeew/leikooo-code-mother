@@ -324,11 +324,13 @@ public class AppController {
     }
 
     @GetMapping("/source/file-tree")
+    @AuthCheck(mustRole = UserConstant.USER_ROLE)
     public BaseResponse<FileTreeNodeVO> getFileTree(@RequestParam(name = "appId") Long appId) {
         return ResultUtils.success(appSourceService.getFileTree(appId));
     }
 
     @GetMapping("/source/file-content")
+    @AuthCheck(mustRole = UserConstant.USER_ROLE)
     public BaseResponse<FileContentVO> getFileContent(
             @RequestParam(name = "appId") Long appId,
             @RequestParam(name = "filePath") String filePath,
@@ -339,6 +341,7 @@ public class AppController {
     }
 
     @GetMapping("/source/files")
+    @AuthCheck(mustRole = UserConstant.USER_ROLE)
     public BaseResponse<FileListVO> getFileList(
             @RequestParam(name = "appId") Long appId,
             @RequestParam(name = "directory", required = false) String directory,
@@ -348,6 +351,7 @@ public class AppController {
     }
 
     @PostMapping("/deploy")
+    @AuthCheck(mustRole = UserConstant.USER_ROLE)
     public BaseResponse<String> deployApp(@RequestBody AppDeployRequest appDeployRequest) {
         ThrowUtils.throwIf(appDeployRequest == null || appDeployRequest.getAppId() == null, ErrorCode.PARAMS_ERROR);
         String deployKey = appService.deployApp(appDeployRequest.getAppId());
