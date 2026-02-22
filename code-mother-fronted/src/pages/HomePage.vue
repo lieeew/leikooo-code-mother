@@ -80,7 +80,7 @@ const loadMyApps = async () => {
 
   try {
     const res = await listMyAppVoByPage({
-      pageNum: myAppsPage.current,
+      current: myAppsPage.current,
       pageSize: myAppsPage.pageSize,
       sortField: 'createTime',
       sortOrder: 'desc',
@@ -93,7 +93,7 @@ const loadMyApps = async () => {
         myAppsPage.total = res.data.data.length
       } else {
         myApps.value = res.data.data.records || []
-        myAppsPage.total = res.data.data.totalRow || 0
+        myAppsPage.total = res.data.data.total || 0
       }
     }
   } catch (error) {
@@ -105,7 +105,7 @@ const loadMyApps = async () => {
 const loadFeaturedApps = async () => {
   try {
     const res = await listGoodAppVoByPage({
-      pageNum: featuredAppsPage.current,
+      current: featuredAppsPage.current,
       pageSize: featuredAppsPage.pageSize,
       sortField: 'createTime',
       sortOrder: 'desc',
@@ -113,7 +113,7 @@ const loadFeaturedApps = async () => {
 
     if (res.data.code === 0 && res.data.data) {
       featuredApps.value = res.data.data.records || []
-      featuredAppsPage.total = res.data.data.totalRow || 0
+      featuredAppsPage.total = res.data.data.total || 0
     }
   } catch (error) {
     console.error('加载精选应用失败：', error)

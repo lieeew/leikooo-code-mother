@@ -43,4 +43,15 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean("runtimeCheckExecutor")
+    public Executor runtimeCheckExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(10);
+        executor.setThreadNamePrefix("runtime-check-");
+        executor.initialize();
+        return executor;
+    }
 }

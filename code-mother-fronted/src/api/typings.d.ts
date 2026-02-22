@@ -138,12 +138,6 @@ declare namespace API {
     message?: string
   }
 
-  type BaseResponseListAppVO = {
-    code?: number
-    data?: AppVO[]
-    message?: string
-  }
-
   type BaseResponseLong = {
     code?: number
     data?: number
@@ -165,6 +159,12 @@ declare namespace API {
   type BaseResponsePageUserVO = {
     code?: number
     data?: PageUserVO
+    message?: string
+  }
+
+  type BaseResponseRuntimeCheckResultVO = {
+    code?: number
+    data?: RuntimeCheckResultVO
     message?: string
   }
 
@@ -308,6 +308,14 @@ declare namespace API {
     limit?: number
   }
 
+  type getRuntimeCheckResultParams = {
+    appId: number
+  }
+
+  type getScreenshotParams = {
+    appId: number
+  }
+
   type getUserByIdParams = {
     userId: string
   }
@@ -378,6 +386,14 @@ declare namespace API {
     versionNum: number
   }
 
+  type RuntimeCheckResultVO = {
+    hasErrors?: boolean
+    consoleErrors?: string[]
+    jsExceptions?: string[]
+    hasScreenshot?: boolean
+    checkTime?: string
+  }
+
   type SendCodeRequest = {
     email: string
   }
@@ -391,6 +407,10 @@ declare namespace API {
   type streamParams = {
     sessionId: string
     message: string
+  }
+
+  type triggerRuntimeCheckParams = {
+    appId: number
   }
 
   type User = {

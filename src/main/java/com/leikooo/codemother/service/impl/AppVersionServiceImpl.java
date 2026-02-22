@@ -14,9 +14,11 @@ import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.model.entity.AppVersion;
 import com.leikooo.codemother.model.enums.BuildResultEnum;
 import com.leikooo.codemother.model.enums.VersionStatusEnum;
+import com.leikooo.codemother.model.vo.RuntimeCheckResultVO;
 import com.leikooo.codemother.service.AppService;
 import com.leikooo.codemother.service.AppVersionService;
 import com.leikooo.codemother.utils.ProjectPathUtils;
+import com.leikooo.codemother.utils.RuntimeCheckUtils;
 import com.leikooo.codemother.utils.VersionCache;
 import com.leikooo.codemother.utils.VueBuildUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -194,6 +196,8 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
                 if (buildResultEnum == BuildResultEnum.SUCCESS) {
                     metadata.put("status", VersionStatusEnum.SUCCESS.name());
                     metadata.put("buildTime", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                    // Build 成功后触发运行时检测
+                    asyncRuntimeCheck(appIdStr);
                 } else {
                     metadata.put("status", VersionStatusEnum.NEED_FIX.name());
                     metadata.put("errorLog", buildResult.fullLog());
@@ -250,6 +254,117 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
             log.error("[Rollback] 回滚失败: appId={}, version=v{}", appId, versionNum, e);
             throw new RuntimeException("回滚失败", e);
         }
+    }
+
+    @Async("runtimeCheckExecutor")
+    @Override
+    public void asyncRuntimeCheck(String appIdStr) {
+        Long appId = Long.parseLong(appIdStr);
+        log.info("[RuntimeCheck] 开始运行时检测: appId={}", appId);
+
+        try {
+            Integer versionNum = versionCache.get(appIdStr);
+            if (versionNum == null) {
+                versionNum = getMaxVersionNum(appId);
+            }
+
+            Path versionPath = buildVersionPath(appId, versionNum);
+            Map<String, Object> metadata = readMetadata(versionPath);
+
+            String status = (String) metadata.get("status");
+//            if (!VersionStatusEnum.NEED_FIX.name().equals(status)) {
+//                log.info("[RuntimeCheck] Build 未成功，跳过运行时检测: appId={}, status={}", appId, status);
+//                return;
+//            }
+
+            String projectPath = ProjectPathUtils.getProjectPath(appIdStr);
+            RuntimeCheckUtils.RuntimeCheckResult result = RuntimeCheckUtils.checkRuntime(projectPath, appIdStr);
+
+            metadata.put("runtimeErrors", result.consoleErrors());
+            metadata.put("runtimeExceptions", result.jsExceptions());
+            metadata.put("runtimeCheckTime", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            metadata.put("hasScreenshot", result.screenshotPath() != null);
+
+            if (result.hasErrors()) {
+                metadata.put("runtimeErrorLog", result.fullLog());
+                metadata.put("status", VersionStatusEnum.NEED_FIX.name());
+                this.lambdaUpdate()
+                        .eq(AppVersion::getAppId, appId)
+                        .eq(AppVersion::getVersionNum, versionNum)
+                        .set(AppVersion::getStatus, VersionStatusEnum.NEED_FIX.name())
+                        .update();
+            }
+            saveMetadata(versionPath, metadata);
+
+            log.info("[RuntimeCheck] 运行时检测完成: appId={}, hasErrors={}, consoleErrors={}, jsExceptions={}",
+                    appId, result.hasErrors(), result.consoleErrors().size(), result.jsExceptions().size());
+
+        } catch (Exception e) {
+            log.error("[RuntimeCheck] 运行时检测失败: appId={}", appId, e);
+        }
+    }
+
+    private App getValidatedApp(Long appId) {
+        App app = appService.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR);
+        return app;
+    }
+
+    private Path buildVersionPath(Long appId, Integer versionNum) {
+        return Paths.get(ResourcePathConstant.GENERATED_APPS_DIR, appId.toString(), "v" + versionNum);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readMetadata(Path versionPath) {
+        Path metadataPath = versionPath.resolve("metadata.json");
+        ThrowUtils.throwIf(!Files.exists(metadataPath), ErrorCode.SYSTEM_ERROR, "metadata.json 不存在");
+        try {
+            return objectMapper.readValue(metadataPath.toFile(), Map.class);
+        } catch (IOException e) {
+            throw new RuntimeException("读取 metadata.json 失败", e);
+        }
+    }
+
+    @Override
+    public String getFixErrorMessage(Long appId) {
+        App app = getValidatedApp(appId);
+        Integer currentVersion = app.getCurrentVersionNum();
+
+        AppVersion version = getByVersionNum(appId, currentVersion);
+        ThrowUtils.throwIf(version == null, ErrorCode.NOT_FOUND_ERROR);
+        ThrowUtils.throwIf(!VersionStatusEnum.NEED_FIX.name().equals(version.getStatus()),
+                ErrorCode.OPERATION_ERROR, "当前版本无需修复");
+
+        Map<String, Object> metadata = readMetadata(buildVersionPath(appId, currentVersion));
+        String errorLog = (String) metadata.getOrDefault("errorLog", "");
+        String runtimeErrorLog = (String) metadata.getOrDefault("runtimeErrorLog", "");
+
+        StringBuilder errorMsg = new StringBuilder();
+        if (!errorLog.isEmpty()) {
+            errorMsg.append("构建错误:\n").append(errorLog);
+        }
+        if (!runtimeErrorLog.isEmpty()) {
+            if (!errorMsg.isEmpty()) errorMsg.append("\n\n");
+            errorMsg.append("运行时错误:\n").append(runtimeErrorLog);
+        }
+
+        asyncRuntimeCheck(appId.toString());
+        return String.format("遇到了下面的 BUG: %s", errorMsg);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public RuntimeCheckResultVO getRuntimeCheckResult(Long appId) {
+        App app = getValidatedApp(appId);
+        Map<String, Object> metadata = readMetadata(buildVersionPath(appId, app.getCurrentVersionNum()));
+
+        List<String> consoleErrors = (List<String>) metadata.getOrDefault("runtimeErrors", List.of());
+        List<String> jsExceptions = (List<String>) metadata.getOrDefault("runtimeExceptions", List.of());
+        boolean hasScreenshot = Boolean.TRUE.equals(metadata.getOrDefault("hasScreenshot", false));
+        String checkTime = (String) metadata.getOrDefault("runtimeCheckTime", "");
+        boolean hasErrors = !consoleErrors.isEmpty() || !jsExceptions.isEmpty();
+
+        return new RuntimeCheckResultVO(hasErrors, consoleErrors, jsExceptions, hasScreenshot, checkTime);
     }
 
     private void clearDirectory(Path dir) {

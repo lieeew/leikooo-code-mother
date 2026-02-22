@@ -21,12 +21,11 @@ import com.leikooo.codemother.model.dto.CreatAppDto;
 import com.leikooo.codemother.model.dto.GenAppDto;
 import com.leikooo.codemother.model.dto.request.app.*;
 import com.leikooo.codemother.model.entity.App;
-import com.leikooo.codemother.model.entity.AppVersion;
-import com.leikooo.codemother.model.enums.VersionStatusEnum;
 import com.leikooo.codemother.model.vo.AppVO;
 import com.leikooo.codemother.model.vo.FileContentVO;
 import com.leikooo.codemother.model.vo.FileListVO;
 import com.leikooo.codemother.model.vo.FileTreeNodeVO;
+import com.leikooo.codemother.model.vo.RuntimeCheckResultVO;
 import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.service.AppService;
 import com.leikooo.codemother.service.AppSourceService;
@@ -34,11 +33,13 @@ import com.leikooo.codemother.service.AppVersionService;
 import com.leikooo.codemother.service.UserService;
 import com.leikooo.codemother.utils.UuidV7Generator;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.cache.annotation.Cacheable;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 
@@ -155,7 +156,7 @@ public class AppController {
 
     @AuthCheck(mustRole = UserConstant.USER_ROLE)
     @PostMapping("/my/list/page/vo")
-    public BaseResponse<List<AppVO>> listMyAppVOByPage(@RequestBody AppQueryRequest appQueryRequest) {
+    public BaseResponse<Page<AppVO>> listMyAppVOByPage(@RequestBody AppQueryRequest appQueryRequest) {
         int pageSize = appQueryRequest.getPageSize();
         int current = appQueryRequest.getCurrent();
         ThrowUtils.throwIf(pageSize > 50, ErrorCode.PARAMS_ERROR);
@@ -164,7 +165,10 @@ public class AppController {
                 new Page<>(current, pageSize),
                 appService.getQueryWrapper(AppQueryDto.toDto(appQueryRequest, userLogin))
         );
-        return ResultUtils.success(appService.getAppVOList(page.getRecords()));
+        Page<AppVO> appVOPage = new Page<>(current, pageSize, page.getTotal());
+        List<AppVO> appVOList = appService.getAppVOList(page.getRecords());
+        appVOPage.setRecords(appVOList);
+        return ResultUtils.success(appVOPage);
     }
 
     /**
@@ -285,24 +289,37 @@ public class AppController {
     @GetMapping("/fix/error")
     public BaseResponse<String> getFixError(@RequestParam(name = "appId") Long appId) {
         ThrowUtils.throwIf(appId == null, ErrorCode.PARAMS_ERROR);
+        String errorMessage = appVersionService.getFixErrorMessage(appId);
+        return ResultUtils.success(errorMessage);
+    }
+
+    @PostMapping("/runtime-check")
+    public BaseResponse<Boolean> triggerRuntimeCheck(@RequestParam(name = "appId") Long appId) {
+        ThrowUtils.throwIf(appId == null, ErrorCode.PARAMS_ERROR);
         App app = appService.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR);
-        Integer currentVersion = app.getCurrentVersionNum();
-        AppVersion version = appVersionService.getByVersionNum(appId, currentVersion);
-        ThrowUtils.throwIf(version == null, ErrorCode.NOT_FOUND_ERROR);
-        ThrowUtils.throwIf(!VersionStatusEnum.NEED_FIX.name().equals(version.getStatus()),
-                ErrorCode.OPERATION_ERROR, "当前版本无需修复");
-        // 读取 metadata.json 获取 errorLog
-        String versionPath = ResourcePathConstant.GENERATED_APPS_DIR + "/" + appId + "/v" + currentVersion;
-        File metadataFile = new File(versionPath, "metadata.json");
-        ThrowUtils.throwIf(!metadataFile.exists(), ErrorCode.SYSTEM_ERROR, "metadata.json 不存在");
-        try {
-            String content = Files.readString(metadataFile.toPath());
-            JSONObject metadata = new JSONObject(content);
-            String errorLog = metadata.getStr("errorLog", "");
-            return ResultUtils.success(String.format("遇到了下面的 BUG: %s", errorLog));
+        appVersionService.asyncRuntimeCheck(appId.toString());
+        return ResultUtils.success(true);
+    }
+
+    @GetMapping("/runtime-check/result")
+    public BaseResponse<RuntimeCheckResultVO> getRuntimeCheckResult(@RequestParam(name = "appId") Long appId) {
+        ThrowUtils.throwIf(appId == null, ErrorCode.PARAMS_ERROR);
+        RuntimeCheckResultVO result = appVersionService.getRuntimeCheckResult(appId);
+        return ResultUtils.success(result);
+    }
+
+    @GetMapping("/screenshot")
+    public void getScreenshot(@RequestParam(name = "appId") Long appId, HttpServletResponse response) {
+        ThrowUtils.throwIf(appId == null, ErrorCode.PARAMS_ERROR);
+        String screenshotPath = ResourcePathConstant.GENERATED_APPS_DIR + "/" + appId + "/current/screenshot.png";
+        File file = new File(screenshotPath);
+        ThrowUtils.throwIf(!file.exists(), ErrorCode.NOT_FOUND_ERROR, "截图不存在");
+        response.setContentType("image/png");
+        try (var in = new FileInputStream(file); var out = response.getOutputStream()) {
+            in.transferTo(out);
         } catch (IOException e) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "读取 metadata.json 失败");
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "读取截图失败");
         }
     }
 

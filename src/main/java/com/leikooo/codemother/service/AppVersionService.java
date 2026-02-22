@@ -2,6 +2,7 @@ package com.leikooo.codemother.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.leikooo.codemother.model.entity.AppVersion;
+import com.leikooo.codemother.model.vo.RuntimeCheckResultVO;
 
 import java.util.List;
 
@@ -53,4 +54,24 @@ public interface AppVersionService extends IService<AppVersion> {
      * @param appId 应用ID
      */
     void updateBuildStatus(String appId);
+
+    /**
+     * 异步执行运行时检测
+     * @param appIdStr 应用ID字符串
+     */
+    void asyncRuntimeCheck(String appIdStr);
+
+    /**
+     * 获取修复错误信息（包含构建错误和运行时错误）
+     * @param appId 应用ID
+     * @return 错误信息字符串
+     */
+    String getFixErrorMessage(Long appId);
+
+    /**
+     * 获取运行时检测结果
+     * @param appId 应用ID
+     * @return 运行时检测结果VO
+     */
+    RuntimeCheckResultVO getRuntimeCheckResult(Long appId);
 }

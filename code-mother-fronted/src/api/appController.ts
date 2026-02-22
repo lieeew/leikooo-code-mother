@@ -163,12 +163,57 @@ export async function listMyAppVoByPage(
   body: API.AppQueryRequest,
   options?: { [key: string]: any }
 ) {
-  return request<API.BaseResponseListAppVO>('/app/my/list/page/vo', {
+  return request<API.BaseResponsePageAppVO>('/app/my/list/page/vo', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     data: body,
+    ...(options || {}),
+  })
+}
+
+/** 此处后端没有提供注释 POST /app/runtime-check */
+export async function triggerRuntimeCheck(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: API.triggerRuntimeCheckParams,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseBoolean>('/app/runtime-check', {
+    method: 'POST',
+    params: {
+      ...params,
+    },
+    ...(options || {}),
+  })
+}
+
+/** 此处后端没有提供注释 GET /app/runtime-check/result */
+export async function getRuntimeCheckResult(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: API.getRuntimeCheckResultParams,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseRuntimeCheckResultVO>('/app/runtime-check/result', {
+    method: 'GET',
+    params: {
+      ...params,
+    },
+    ...(options || {}),
+  })
+}
+
+/** 此处后端没有提供注释 GET /app/screenshot */
+export async function getScreenshot(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: API.getScreenshotParams,
+  options?: { [key: string]: any }
+) {
+  return request<any>('/app/screenshot', {
+    method: 'GET',
+    params: {
+      ...params,
+    },
     ...(options || {}),
   })
 }
