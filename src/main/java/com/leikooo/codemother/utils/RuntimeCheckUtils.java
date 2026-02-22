@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.StringJoiner;
+import java.io.File;
 
 @Slf4j
 public class RuntimeCheckUtils {
@@ -131,10 +132,11 @@ public class RuntimeCheckUtils {
         ProcessBuilder pb;
         String command = "npx vite preview --host " + LOCALHOST + " --port " + port;
         if (os.contains("win")) {
-            pb = new ProcessBuilder("cmd", "/c", "cd /d " + projectPath + " && " + command);
+            pb = new ProcessBuilder("cmd", "/c", command);
         } else {
-            pb = new ProcessBuilder("bash", "-c", "cd " + projectPath + " && " + command);
+            pb = new ProcessBuilder("bash", "-c", command);
         }
+        pb.directory(new File(projectPath));
         pb.redirectErrorStream(true);
         return pb.start();
     }
@@ -156,8 +158,8 @@ public class RuntimeCheckUtils {
                 if (response.statusCode() < 500) {
                     return true;
                 }
-            } catch (Exception ignored) {
-                ignored.printStackTrace();
+            } catch (Exception e) {
+                log.debug("waitForServerReady retry: url={}, attempt={}, error={}", url, i + 1, e.getMessage());
             }
             try {
                 Thread.sleep(1000);

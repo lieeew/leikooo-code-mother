@@ -6,6 +6,7 @@ import com.leikooo.codemother.exception.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -44,10 +45,11 @@ public class VueBuildUtils {
             String os = System.getProperty("os.name").toLowerCase();
             ProcessBuilder pb;
             if (os.contains("win")) {
-                pb = new ProcessBuilder("cmd", "/c", "chcp 65001 > null && cd /d " + projectPath + " && npm config set registry " + NPM_REGISTRY + " && npm install && npm run build");
+                pb = new ProcessBuilder("cmd", "/c", "chcp 65001 > null && npm config set registry " + NPM_REGISTRY + " && npm install && npm run build");
             } else {
-                pb = new ProcessBuilder("bash", "-c", "export LANG=en_US.UTF-8 && export LC_ALL=en_US.UTF-8 && cd " + projectPath + " && npm config set registry " + NPM_REGISTRY + " && npm install && npm run build");
+                pb = new ProcessBuilder("bash", "-c", "export LANG=en_US.UTF-8 && export LC_ALL=en_US.UTF-8 && npm config set registry " + NPM_REGISTRY + " && npm install && npm run build");
             }
+            pb.directory(new File(projectPath));
             pb.redirectErrorStream(true);
             Process process = pb.start();
 

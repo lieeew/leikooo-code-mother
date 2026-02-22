@@ -28,6 +28,7 @@ import org.springframework.util.DigestUtils;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -43,6 +44,7 @@ import static com.leikooo.codemother.exception.ErrorCode.*;
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         implements UserService {
+    private static final Set<String> USER_SORT_FIELDS = Set.of("createTime", "updateTime", "userAccount", "userName", "id");
 
     private final JavaMailSender javaMailSender;
     private final RedissonClient redissonClient;
@@ -214,7 +216,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
                 .like(StringUtils.isNotBlank(userName), "userName", userName)
                 .like(StringUtils.isNotBlank(userProfile), "userProfile", userProfile);
 
-        if (StringUtils.isNotBlank(sortField)) {
+        if (StringUtils.isNotBlank(sortField) && USER_SORT_FIELDS.contains(sortField)) {
             queryWrapper.orderBy(true, "ascend".equals(sortOrder), sortField);
         } else {
             queryWrapper.orderBy(true, false, "createTime");
@@ -263,7 +265,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
 }
-
 
 
 

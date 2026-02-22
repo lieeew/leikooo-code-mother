@@ -9,6 +9,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.leikooo.codemother.ai.AiChatClient;
 import com.leikooo.codemother.ai.GenerationManager;
 import com.leikooo.codemother.constant.ResourcePathConstant;
+import com.leikooo.codemother.constant.UserConstant;
 import com.leikooo.codemother.event.AppCreatedEvent;
 import com.leikooo.codemother.exception.BusinessException;
 import com.leikooo.codemother.exception.ErrorCode;
@@ -41,6 +42,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * @author leikooo
@@ -51,6 +53,7 @@ import java.util.Objects;
 @Service
 public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         implements AppService {
+    private static final Set<String> APP_SORT_FIELDS = Set.of("createTime", "updateTime", "priority", "appName", "id");
 
     private final AiChatClient aiChatClient;
     private final UserService userService;
@@ -108,13 +111,15 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         String message = genAppDto.getMessage();
         String appId = genAppDto.getAppId();
         try {
-            App app = this.lambdaQuery().eq(App::getId, appId).one();
+            Long appIdLong = Long.parseLong(appId);
+            App app = this.lambdaQuery().eq(App::getId, appIdLong).one();
+            ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
             String codeGenType = app.getCodeGenType();
             ThrowUtils.throwIf(StringUtils.isEmpty(codeGenType), ErrorCode.SYSTEM_ERROR);
             CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenType);
             return new GenAppDto(message, appId, codeGenTypeEnum, genAppDto.getUserLogin());
-        } catch (Exception e) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        } catch (NumberFormatException e) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用 id 非法");
         }
     }
 
@@ -154,7 +159,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         if (StringUtils.isNotBlank(userId)) {
             queryWrapper.eq("userId", UuidV7Generator.stringToBytes(userId));
         }
-        if (StrUtil.isNotBlank(sortField)) {
+        if (StrUtil.isNotBlank(sortField) && APP_SORT_FIELDS.contains(sortField)) {
             queryWrapper.orderBy(true, "ascend".equals(sortOrder), sortField);
         } else {
             queryWrapper.orderBy(true, false, "createTime");
@@ -194,6 +199,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         ThrowUtils.throwIf(Objects.isNull(appId), ErrorCode.PARAMS_ERROR);
         App app = this.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        UserVO userLogin = userService.getUserLogin();
+        ThrowUtils.throwIf(!Objects.equals(app.getUserId(), UuidV7Generator.stringToBytes(userLogin.getId()))
+                        && !UserConstant.ADMIN_ROLE.equals(userLogin.getUserRole()),
+                ErrorCode.NO_AUTH_ERROR,
+                "无权限部署该应用");
 
         if (StrUtil.isNotBlank(app.getDeployKey())) {
             log.info("[Deploy] 应用已部署，直接返回 deployKey: appId={}, deployKey={}", appId, app.getDeployKey());

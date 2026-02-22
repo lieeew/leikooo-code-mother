@@ -14,7 +14,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.File;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
 
 import static org.springframework.http.MediaType.*;
@@ -34,7 +37,7 @@ public class StaticResourceController {
             "jpg", IMAGE_JPEG_VALUE
     );
 
-    private static final String PATH = ResourcePathConstant.GENERATED_APPS_DIR;
+    private static final String PATH = ResourcePathConstant.DEPLOY_DIR;
 
     @GetMapping("/{deployKey}/**")
     public ResponseEntity<Resource> serveStaticResource(
@@ -51,14 +54,19 @@ public class StaticResourceController {
         if ("/".equals(resourcePath)) {
             resourcePath = File.separator + "index.html";
         }
-        String finalPath = PATH + File.separator + deployKey + File.separator + "current" + resourcePath;
-        File file = new File(finalPath);
+        String decodedPath = URLDecoder.decode(resourcePath, StandardCharsets.UTF_8);
+        Path basePath = Paths.get(PATH, deployKey).toAbsolutePath().normalize();
+        Path targetPath = basePath.resolve(decodedPath.replaceFirst("^/", "")).toAbsolutePath().normalize();
+        if (!targetPath.startsWith(basePath)) {
+            return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+        }
+        File file = targetPath.toFile();
         if (!file.exists()) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
         Resource resource = new FileSystemResource(file);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, getContentTypeWithCharset(finalPath))
+                .header(HttpHeaders.CONTENT_TYPE, getContentTypeWithCharset(targetPath.toString()))
                 .body(resource);
     }
 
