@@ -37,7 +37,7 @@ public class StaticResourceController {
             "jpg", IMAGE_JPEG_VALUE
     );
 
-    private static final String PATH = ResourcePathConstant.DEPLOY_DIR;
+    private static final String PATH = ResourcePathConstant.GENERATED_APPS_DIR;
 
     @GetMapping("/{deployKey}/**")
     public ResponseEntity<Resource> serveStaticResource(
@@ -55,7 +55,7 @@ public class StaticResourceController {
             resourcePath = File.separator + "index.html";
         }
         String decodedPath = URLDecoder.decode(resourcePath, StandardCharsets.UTF_8);
-        Path basePath = Paths.get(PATH, deployKey).toAbsolutePath().normalize();
+        Path basePath = Paths.get(PATH, deployKey, "current").toAbsolutePath().normalize();
         Path targetPath = basePath.resolve(decodedPath.replaceFirst("^/", "")).toAbsolutePath().normalize();
         if (!targetPath.startsWith(basePath)) {
             return new ResponseEntity<>(HttpStatus.FORBIDDEN);

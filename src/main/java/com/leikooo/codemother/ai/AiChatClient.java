@@ -16,6 +16,7 @@ import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.converter.ThinkingTagCleaner;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -35,15 +36,15 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 public class AiChatClient {
     private final ChatClient chatClient;
     private JdbcChatMemoryRepository chatMemoryRepository;
-    private final ChatModel openAiChatModel;
+    private final ChatModel miniMaxChatModel;
     private final FileTools fileTools;
 
-    public AiChatClient(ChatModel openAiChatModel, TodolistTools todolistTools, FileTools fileTools, ContextTools contextTools, ToolAdvisor toolAdvisor, MessageAggregatorAdvisor messageAggregatorAdvisor, BuildAdvisor buildAdvisor, ObservableRecordService observableRecordService, ToolCallRecordService toolCallRecordService, JdbcChatMemoryRepository chatMemoryRepository, VersionAdvisor versionAdvisor, ContextCompressionAdvisor contextCompressionAdvisor) {
+    public AiChatClient(@Qualifier("miniMaxChatModel") ChatModel miniMaxChatModel, TodolistTools todolistTools, FileTools fileTools, ContextTools contextTools, ToolAdvisor toolAdvisor, MessageAggregatorAdvisor messageAggregatorAdvisor, BuildAdvisor buildAdvisor, ObservableRecordService observableRecordService, ToolCallRecordService toolCallRecordService, JdbcChatMemoryRepository chatMemoryRepository, VersionAdvisor versionAdvisor, ContextCompressionAdvisor contextCompressionAdvisor) {
         this.chatMemoryRepository = chatMemoryRepository;
-        this.openAiChatModel = openAiChatModel;
+        this.miniMaxChatModel = miniMaxChatModel;
         this.fileTools = fileTools;
         this.chatClient = ChatClient
-                .builder(openAiChatModel)
+                .builder(miniMaxChatModel)
                 .defaultAdvisors(buildAdvisor, toolAdvisor, messageAggregatorAdvisor, versionAdvisor,
                         contextCompressionAdvisor,
                         new SystemMessageFirstAdvisor(), new LogAdvisor(),
@@ -101,7 +102,7 @@ public class AiChatClient {
     public Flux<String> fixCode(GenAppDto genAppDto) {
         String userId = genAppDto.getUserLogin().getId();
         String appId = genAppDto.getAppId();
-        return ChatClient.builder(openAiChatModel)
+        return ChatClient.builder(miniMaxChatModel)
                 .build().prompt()
                 .user(genAppDto.getMessage())
                 .system(new ClassPathResource("prompt/build-advisor-system-prompt.md"), UTF_8)
@@ -125,7 +126,7 @@ public class AiChatClient {
      * @return CodeGenTypeEnum
      */
     public CodeGenTypeEnum selectGenTypeEnum(String prompt, Long appId, String userId) {
-        String rawResponse = ChatClient.builder(openAiChatModel)
+        String rawResponse = ChatClient.builder(miniMaxChatModel)
                 .build().prompt()
                 .user(prompt)
                 .system(new ClassPathResource("prompt/codegen-routing-system-prompt.md"), UTF_8)
@@ -152,7 +153,7 @@ public class AiChatClient {
      * @return 生成的应用名称
      */
     public String generateAppName(String initPrompt) {
-        String rawResponse = ChatClient.builder(openAiChatModel)
+        String rawResponse = ChatClient.builder(miniMaxChatModel)
                 .build().prompt(initPrompt)
                 .system(new ClassPathResource("prompt/app-naming-prompt.md"), UTF_8)
                 .call().content();

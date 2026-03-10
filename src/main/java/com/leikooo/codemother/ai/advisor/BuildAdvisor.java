@@ -1,6 +1,5 @@
 package com.leikooo.codemother.ai.advisor;
 
-import com.leikooo.codemother.ai.AiChatClient;
 import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
 import com.leikooo.codemother.service.AppService;
@@ -13,31 +12,29 @@ import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisor;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisorChain;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.SignalType;
+
+import java.util.concurrent.Executor;
 
 /**
  * 构建 Advisor
- * 作用：在 AI 流完成后执行构建并更新状态
- * 顺序：order=MAX-200（在 VersionAdvisor 之后执行）
+ * 作用：在 AI 流完成后异步执行构建并更新状态
+ * 顺序：order=MAX-300（outer，doOnComplete 在 VersionAdvisor 之后触发）
  */
 @Slf4j
 @Component
 public class BuildAdvisor implements CallAdvisor, StreamAdvisor {
 
-    private static final int MAX_RETRY_COUNT = 3;
     private final AppService appService;
     private final AppVersionService appVersionService;
-    private final AiChatClient aiChatClient;
 
     public BuildAdvisor(@Lazy AppService appService,
-                        @Lazy AppVersionService appVersionService,
-                        @Lazy AiChatClient aiChatClient) {
+                        @Lazy AppVersionService appVersionService) {
         this.appService = appService;
         this.appVersionService = appVersionService;
-        this.aiChatClient = aiChatClient;
     }
 
     @Override
@@ -50,27 +47,17 @@ public class BuildAdvisor implements CallAdvisor, StreamAdvisor {
         }
 
         return chain.nextStream(request)
-                .doFinally(signal -> onStreamComplete(signal, app));
+                .doOnComplete(() -> {
+                    try {
+                        appVersionService.updateBuildStatus(app.getId().toString());
+                    } catch (Exception e) {
+                        log.error("[BuildAdvisor] 更新构建状态失败: appId={}", app.getId(), e);
+                    }
+                });
     }
 
     private boolean isVueProject(App app) {
         return CodeGenTypeEnum.VUE_PROJECT == CodeGenTypeEnum.getEnumByValue(app.getCodeGenType());
-    }
-
-    private void onStreamComplete(SignalType signal, App app) {
-        if (!SignalType.ON_COMPLETE.equals(signal)) {
-            log.info("[BuildAdvisor] Stream terminated early, signal={}, appId={}", signal, app.getId());
-            return;
-        }
-        if (!isVueProject(app)) {
-            return;
-        }
-
-        try {
-            appVersionService.updateBuildStatus(app.getId().toString());
-        } catch (Exception e) {
-            log.error("[BuildAdvisor] 更新构建状态失败: appId={}", app.getId(), e);
-        }
     }
 
     @Override
@@ -80,7 +67,7 @@ public class BuildAdvisor implements CallAdvisor, StreamAdvisor {
 
     @Override
     public int getOrder() {
-        return Integer.MAX_VALUE - 200;
+        return Integer.MAX_VALUE - 300;
     }
 
     @Override

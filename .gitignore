@@ -33,5 +33,5 @@ build/
 .vscode/
 src/main/resources/application-local.yml
 temp
-doc
+plans
 logs

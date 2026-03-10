@@ -32,7 +32,7 @@ public enum CodeGenTypeEnum {
      */
     public static CodeGenTypeEnum getEnumByValue(String value) {
         if (ObjUtil.isEmpty(value)) {
-            return null;
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "CodeGenTypeEnum 枚举类不存在");
         }
         for (CodeGenTypeEnum anEnum : CodeGenTypeEnum.values()) {
             if (anEnum.value.equals(value)) {

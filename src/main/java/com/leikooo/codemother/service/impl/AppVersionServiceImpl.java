@@ -17,6 +17,7 @@ import com.leikooo.codemother.model.enums.VersionStatusEnum;
 import com.leikooo.codemother.model.vo.RuntimeCheckResultVO;
 import com.leikooo.codemother.service.AppService;
 import com.leikooo.codemother.service.AppVersionService;
+import com.leikooo.codemother.utils.BuildOutputValidator;
 import com.leikooo.codemother.utils.ProjectPathUtils;
 import com.leikooo.codemother.utils.RuntimeCheckUtils;
 import com.leikooo.codemother.utils.VersionCache;
@@ -194,10 +195,18 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
             if (Files.exists(metadataPath)) {
                 Map<String, Object> metadata = objectMapper.readValue(metadataPath.toFile(), Map.class);
                 if (buildResultEnum == BuildResultEnum.SUCCESS) {
-                    metadata.put("status", VersionStatusEnum.SUCCESS.name());
-                    metadata.put("buildTime", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-                    // Build 成功后触发运行时检测
-                    asyncRuntimeCheck(appIdStr);
+                    BuildOutputValidator.ValidationResult validation = BuildOutputValidator.ValidationResult.validateVueBuild(projectPath);
+                    if (!validation.valid()) {
+                        metadata.put("status", VersionStatusEnum.NEED_FIX.name());
+                        metadata.put("errorLog", buildResult.fullLog() + "\n\n=== Build Output Validation Failed ===\n" + validation.summary());
+                        buildResultEnum = BuildResultEnum.ERROR;
+                        log.warn("[AppVersion] Build output validation failed: appId={}, errors={}", appId, validation.errors());
+                    } else {
+                        metadata.put("status", VersionStatusEnum.SUCCESS.name());
+                        metadata.put("buildTime", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                        asyncRuntimeCheck(appIdStr);
+                        log.info("[AppVersion] Build output validation passed: appId={}", appId);
+                    }
                 } else {
                     metadata.put("status", VersionStatusEnum.NEED_FIX.name());
                     metadata.put("errorLog", buildResult.fullLog());
@@ -259,49 +268,49 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
     @Async("runtimeCheckExecutor")
     @Override
     public void asyncRuntimeCheck(String appIdStr) {
-        Long appId = Long.parseLong(appIdStr);
-        log.info("[RuntimeCheck] 开始运行时检测: appId={}", appId);
-
-        try {
-            Integer versionNum = versionCache.get(appIdStr);
-            if (versionNum == null) {
-                versionNum = getMaxVersionNum(appId);
-            }
-
-            Path versionPath = buildVersionPath(appId, versionNum);
-            Map<String, Object> metadata = readMetadata(versionPath);
-
-            String status = (String) metadata.get("status");
-//            if (!VersionStatusEnum.NEED_FIX.name().equals(status)) {
-//                log.info("[RuntimeCheck] Build 未成功，跳过运行时检测: appId={}, status={}", appId, status);
-//                return;
+//        Long appId = Long.parseLong(appIdStr);
+//        log.info("[RuntimeCheck] 开始运行时检测: appId={}", appId);
+//
+//        try {
+//            Integer versionNum = versionCache.get(appIdStr);
+//            if (versionNum == null) {
+//                versionNum = getMaxVersionNum(appId);
 //            }
-
-            String projectPath = ProjectPathUtils.getProjectPath(appIdStr);
-            RuntimeCheckUtils.RuntimeCheckResult result = RuntimeCheckUtils.checkRuntime(projectPath, appIdStr);
-
-            metadata.put("runtimeErrors", result.consoleErrors());
-            metadata.put("runtimeExceptions", result.jsExceptions());
-            metadata.put("runtimeCheckTime", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-            metadata.put("hasScreenshot", result.screenshotPath() != null);
-
-            if (result.hasErrors()) {
-                metadata.put("runtimeErrorLog", result.fullLog());
-                metadata.put("status", VersionStatusEnum.NEED_FIX.name());
-                this.lambdaUpdate()
-                        .eq(AppVersion::getAppId, appId)
-                        .eq(AppVersion::getVersionNum, versionNum)
-                        .set(AppVersion::getStatus, VersionStatusEnum.NEED_FIX.name())
-                        .update();
-            }
-            saveMetadata(versionPath, metadata);
-
-            log.info("[RuntimeCheck] 运行时检测完成: appId={}, hasErrors={}, consoleErrors={}, jsExceptions={}",
-                    appId, result.hasErrors(), result.consoleErrors().size(), result.jsExceptions().size());
-
-        } catch (Exception e) {
-            log.error("[RuntimeCheck] 运行时检测失败: appId={}", appId, e);
-        }
+//
+//            Path versionPath = buildVersionPath(appId, versionNum);
+//            Map<String, Object> metadata = readMetadata(versionPath);
+//
+//            String status = (String) metadata.get("status");
+////            if (!VersionStatusEnum.NEED_FIX.name().equals(status)) {
+////                log.info("[RuntimeCheck] Build 未成功，跳过运行时检测: appId={}, status={}", appId, status);
+////                return;
+////            }
+//
+//            String projectPath = ProjectPathUtils.getProjectPath(appIdStr);
+//            RuntimeCheckUtils.RuntimeCheckResult result = RuntimeCheckUtils.checkRuntime(projectPath, appIdStr);
+//
+//            metadata.put("runtimeErrors", result.consoleErrors());
+//            metadata.put("runtimeExceptions", result.jsExceptions());
+//            metadata.put("runtimeCheckTime", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+//            metadata.put("hasScreenshot", result.screenshotPath() != null);
+//
+//            if (result.hasErrors()) {
+//                metadata.put("runtimeErrorLog", result.fullLog());
+//                metadata.put("status", VersionStatusEnum.NEED_FIX.name());
+//                this.lambdaUpdate()
+//                        .eq(AppVersion::getAppId, appId)
+//                        .eq(AppVersion::getVersionNum, versionNum)
+//                        .set(AppVersion::getStatus, VersionStatusEnum.NEED_FIX.name())
+//                        .update();
+//            }
+//            saveMetadata(versionPath, metadata);
+//
+//            log.info("[RuntimeCheck] 运行时检测完成: appId={}, hasErrors={}, consoleErrors={}, jsExceptions={}",
+//                    appId, result.hasErrors(), result.consoleErrors().size(), result.jsExceptions().size());
+//
+//        } catch (Exception e) {
+//            log.error("[RuntimeCheck] 运行时检测失败: appId={}", appId, e);
+//        }
     }
 
     private App getValidatedApp(Long appId) {

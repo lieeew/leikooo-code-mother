@@ -108,6 +108,7 @@ public class AppController {
                                 .build()
                 )).doFinally(signalType -> {
                     // doFinally
+                    System.out.println("signalType = " + signalType);
                 });
     }
 
