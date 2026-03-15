@@ -58,9 +58,10 @@ public class ToolContextAspect {
         ToolContext toolContext = getToolContext(joinPoint);
         String className = joinPoint.getTarget().getClass().getSimpleName();
         String methodName = joinPoint.getSignature().getName();
-        if (toolContext != null) {
-            handleToolContext(toolContext, className, methodName, result, false);
+        if (Objects.isNull(toolContext)) {
+            return;
         }
+        handleToolContext(toolContext, className, methodName, result, false);
     }
 
     private void handleToolContext(ToolContext context, String className, String methodName, Object result, boolean isBefore) {

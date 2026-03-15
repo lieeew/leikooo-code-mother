@@ -38,6 +38,12 @@ spring:
             fallback: false
     protocol: smtp
   ai:
+    minimax:
+      api-key:
+      chat:
+        options:
+          model: MiniMax-M2.5
+          temperature: 0.2
     openai:
       api-key: <API-KEY>
       base-url: https://api.qnaigc.com
@@ -57,6 +63,7 @@ server:
   port: 8438
   servlet:
     context-path: /api
+  max-http-request-header-size: 10000000
 sa-token:
   jwt-secret-key: key
 

@@ -1,20 +1,14 @@
 package com.leikooo.codemother.ai;
 
-import com.leikooo.codemother.ai.advisor.*;
-import com.leikooo.codemother.ai.tools.ContextTools;
 import com.leikooo.codemother.ai.tools.FileTools;
-import com.leikooo.codemother.ai.tools.TodolistTools;
 import com.leikooo.codemother.model.dto.ChatContext;
 import com.leikooo.codemother.model.dto.GenAppDto;
 import com.leikooo.codemother.model.dto.ToolsContext;
 import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
-import com.leikooo.codemother.service.ObservableRecordService;
-import com.leikooo.codemother.service.ToolCallRecordService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
-import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.converter.ThinkingTagCleaner;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.ClassPathResource;
@@ -35,22 +29,18 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 @Component
 public class AiChatClient {
     private final ChatClient chatClient;
-    private JdbcChatMemoryRepository chatMemoryRepository;
-    private final ChatModel miniMaxChatModel;
+    private final ChatClient simpleChatClient;
+    private final JdbcChatMemoryRepository chatMemoryRepository;
     private final FileTools fileTools;
 
-    public AiChatClient(@Qualifier("miniMaxChatModel") ChatModel miniMaxChatModel, TodolistTools todolistTools, FileTools fileTools, ContextTools contextTools, ToolAdvisor toolAdvisor, MessageAggregatorAdvisor messageAggregatorAdvisor, BuildAdvisor buildAdvisor, ObservableRecordService observableRecordService, ToolCallRecordService toolCallRecordService, JdbcChatMemoryRepository chatMemoryRepository, VersionAdvisor versionAdvisor, ContextCompressionAdvisor contextCompressionAdvisor) {
-        this.chatMemoryRepository = chatMemoryRepository;
-        this.miniMaxChatModel = miniMaxChatModel;
+    public AiChatClient(@Qualifier("codeGenChatClient") ChatClient chatClient,
+                        @Qualifier("simpleChatClient") ChatClient simpleChatClient,
+                        FileTools fileTools,
+                        JdbcChatMemoryRepository chatMemoryRepository) {
+        this.chatClient = chatClient;
+        this.simpleChatClient = simpleChatClient;
         this.fileTools = fileTools;
-        this.chatClient = ChatClient
-                .builder(miniMaxChatModel)
-                .defaultAdvisors(buildAdvisor, toolAdvisor, messageAggregatorAdvisor, versionAdvisor,
-                        contextCompressionAdvisor,
-                        new SystemMessageFirstAdvisor(), new LogAdvisor(),
-                        new ObservableAdvisor(observableRecordService, toolCallRecordService))
-                .defaultTools(todolistTools, fileTools, contextTools)
-                .build();
+        this.chatMemoryRepository = chatMemoryRepository;
     }
 
     public Flux<String> generateCode(GenAppDto genAppDto) {
@@ -102,8 +92,7 @@ public class AiChatClient {
     public Flux<String> fixCode(GenAppDto genAppDto) {
         String userId = genAppDto.getUserLogin().getId();
         String appId = genAppDto.getAppId();
-        return ChatClient.builder(miniMaxChatModel)
-                .build().prompt()
+        return simpleChatClient.prompt()
                 .user(genAppDto.getMessage())
                 .system(new ClassPathResource("prompt/build-advisor-system-prompt.md"), UTF_8)
                 .advisors(MessageChatMemoryAdvisor
@@ -126,8 +115,7 @@ public class AiChatClient {
      * @return CodeGenTypeEnum
      */
     public CodeGenTypeEnum selectGenTypeEnum(String prompt, Long appId, String userId) {
-        String rawResponse = ChatClient.builder(miniMaxChatModel)
-                .build().prompt()
+        String rawResponse = simpleChatClient.prompt()
                 .user(prompt)
                 .system(new ClassPathResource("prompt/codegen-routing-system-prompt.md"), UTF_8)
                 .advisors(MessageChatMemoryAdvisor
@@ -153,8 +141,7 @@ public class AiChatClient {
      * @return 生成的应用名称
      */
     public String generateAppName(String initPrompt) {
-        String rawResponse = ChatClient.builder(miniMaxChatModel)
-                .build().prompt(initPrompt)
+        String rawResponse = simpleChatClient.prompt(initPrompt)
                 .system(new ClassPathResource("prompt/app-naming-prompt.md"), UTF_8)
                 .call().content();
         ThinkingTagCleaner thinkingTagCleaner = new ThinkingTagCleaner();
@@ -172,3 +159,4 @@ public class AiChatClient {
         return trimmed.toLowerCase();
     }
 }
+

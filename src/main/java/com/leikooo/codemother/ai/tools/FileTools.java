@@ -15,6 +15,7 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -24,6 +25,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * @author leikooo
@@ -368,6 +370,196 @@ public class FileTools extends BaseTools {
             log.error(errorMsg, e);
             return "错误: " + errorMsg;
         }
+    }
+
+    private static final int GREP_MAX_MATCHES = 200;
+    private static final int GREP_MAX_LINE_LENGTH = 500;
+
+    private Pattern compilePattern(String pattern) {
+        return Pattern.compile(pattern);
+    }
+
+    private Path resolveSearchRoot(String conversationId, String directory) {
+        Path outputDirPath = Paths.get(config.getOutputDir(), conversationId, "current").toAbsolutePath().normalize();
+        if (StringUtils.isBlank(directory)) {
+            return outputDirPath;
+        }
+        Path searchRoot = outputDirPath.resolve(normalizePath(directory)).normalize();
+        if (!searchRoot.startsWith(outputDirPath)) {
+            throw new SecurityException("禁止访问输出目录之外的路径");
+        }
+        return searchRoot;
+    }
+
+    private List<String> collectGrepMatches(Path searchRoot, Pattern regex, String fileExtension) throws IOException {
+        List<String> matches = new ArrayList<>();
+        Path baseDir = searchRoot;
+        Files.walkFileTree(searchRoot, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                if (SKIP_DIRS.contains(dir.getFileName() != null ? dir.getFileName().toString() : "")) {
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                if (matches.size() >= GREP_MAX_MATCHES) {
+                    return FileVisitResult.TERMINATE;
+                }
+                if (!isSearchableFile(file, fileExtension)) {
+                    return FileVisitResult.CONTINUE;
+                }
+                searchFileForPattern(file, baseDir, regex, matches);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        return matches;
+    }
+
+    private boolean isSearchableFile(Path file, String fileExtension) {
+        String ext = getFileExtension(file.getFileName().toString());
+        if (!CODE_EXTENSIONS.contains(ext)) {
+            return false;
+        }
+        return StringUtils.isBlank(fileExtension) || ext.equals(fileExtension.startsWith(".") ? fileExtension : "." + fileExtension);
+    }
+
+    private void searchFileForPattern(Path file, Path baseDir, Pattern regex, List<String> matches) throws IOException {
+        String relativePath = baseDir.relativize(file).toString();
+        try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            String line;
+            int lineNum = 0;
+            while ((line = reader.readLine()) != null && matches.size() < GREP_MAX_MATCHES) {
+                lineNum++;
+                if (regex.matcher(line).find()) {
+                    String truncated = line.length() > GREP_MAX_LINE_LENGTH ? line.substring(0, GREP_MAX_LINE_LENGTH) + "..." : line;
+                    matches.add(String.format("%s:%d: %s", relativePath, lineNum, truncated));
+                }
+            }
+        }
+    }
+
+    private String formatGrepResult(String pattern, List<String> matches) {
+        if (matches.isEmpty()) {
+            return "未找到匹配: " + pattern;
+        }
+        StringBuilder result = new StringBuilder();
+        result.append(String.format("搜索 \"%s\" 找到 %d 个匹配:\n\n", pattern, matches.size()));
+        matches.forEach(m -> result.append(m).append("\n"));
+        if (matches.size() >= GREP_MAX_MATCHES) {
+            result.append("\n... 结果已截断，最多显示 ").append(GREP_MAX_MATCHES).append(" 个匹配");
+        }
+        return result.toString();
+    }
+
+    @Tool(description = "Search for files by name pattern (glob). " +
+            "Returns file paths matching the given glob pattern.\n\n" +
+            "Usage:\n" +
+            "- Pattern examples: '*.vue', '**/*Controller.java', 'src/**/*.ts'\n" +
+            "- Uses Java glob syntax (*, **, ?, [abc])\n" +
+            "- Results are capped at 500 files")
+    public String glob(
+            @ToolParam(description = "Glob pattern to match file names, e.g. '*.vue', '**/*.js'")
+            String pattern,
+            @ToolParam(description = "Optional: subdirectory to limit search scope (relative path)")
+            String directory,
+            ToolContext toolContext
+    ) {
+        try {
+            String conversationId = ConversationUtils.getToolsContext(toolContext).appId();
+            if (StringUtils.isBlank(pattern)) {
+                throw new IllegalArgumentException("glob 模式不能为空");
+            }
+            Path searchRoot = resolveSearchRoot(conversationId, directory);
+            List<String> matched = collectGlobMatches(searchRoot, pattern);
+            return formatGlobResult(pattern, matched);
+        } catch (Exception e) {
+            log.error("glob 失败: {}", e.getMessage(), e);
+            return "错误: " + e.getMessage();
+        }
+    }
+
+    private List<String> collectGlobMatches(Path searchRoot, String pattern) throws IOException {
+        String globPattern = pattern.contains("/") || pattern.contains("**") ? pattern : "**/" + pattern;
+        PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + globPattern);
+        List<String> matched = new ArrayList<>();
+        Files.walkFileTree(searchRoot, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                if (SKIP_DIRS.contains(dir.getFileName() != null ? dir.getFileName().toString() : "")) {
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                Path relative = searchRoot.relativize(file);
+                if (matcher.matches(relative) && matched.size() < 500) {
+                    matched.add(relative.toString());
+                }
+                return matched.size() >= 500 ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
+            }
+        });
+        return matched;
+    }
+
+    private String formatGlobResult(String pattern, List<String> matched) {
+        if (matched.isEmpty()) {
+            return "未找到匹配文件: " + pattern;
+        }
+        StringBuilder result = new StringBuilder();
+        result.append(String.format("匹配 \"%s\" 找到 %d 个文件:\n\n", pattern, matched.size()));
+        for (int i = 0; i < matched.size(); i++) {
+            result.append(String.format("%3d. %s%n", i + 1, matched.get(i)));
+        }
+        if (matched.size() >= 500) {
+            result.append("\n... 结果已截断，最多显示 500 个文件");
+        }
+        return result.toString();
+    }
+
+    @Tool(description = "Delete a file at the specified relative path.\n\n" +
+            "Usage:\n" +
+            "- The path must be a relative path\n" +
+            "- Only files within the project directory can be deleted\n" +
+            "- Directories cannot be deleted with this tool")
+    public String deleteFile(
+            @ToolParam(description = "file relative path to delete")
+            String relativeFilePath,
+            ToolContext toolContext
+    ) {
+        try {
+            String conversationId = ConversationUtils.getToolsContext(toolContext).appId();
+            if (StringUtils.isBlank(relativeFilePath)) {
+                throw new IllegalArgumentException("文件路径不能为空");
+            }
+            Path filePath = resolveAndValidatePath(conversationId, relativeFilePath);
+            if (!Files.exists(filePath)) {
+                return "文件不存在: " + normalizePath(relativeFilePath);
+            }
+            if (Files.isDirectory(filePath)) {
+                return "错误: 不能删除目录，请指定文件路径";
+            }
+            Files.delete(filePath);
+            log.info("文件删除成功: {}", filePath);
+            return "文件删除成功: " + normalizePath(relativeFilePath);
+        } catch (Exception e) {
+            log.error("文件删除失败: {}", e.getMessage(), e);
+            return "错误: " + e.getMessage();
+        }
+    }
+
+    private Path resolveAndValidatePath(String conversationId, String relativeFilePath) {
+        String normalizedPath = normalizePath(relativeFilePath);
+        Path outputDirPath = Paths.get(config.getOutputDir(), conversationId, "current").toAbsolutePath().normalize();
+        Path filePath = outputDirPath.resolve(normalizedPath).normalize();
+        if (!filePath.startsWith(outputDirPath)) {
+            throw new SecurityException("禁止访问输出目录之外的路径");
+        }
+        return filePath;
     }
 
     private String normalizePath(String path) {

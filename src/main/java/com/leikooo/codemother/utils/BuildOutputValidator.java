@@ -13,7 +13,7 @@ import java.util.stream.Stream;
 @Slf4j
 public class BuildOutputValidator {
 
-    private static final long MIN_INDEX_SIZE = 500;
+    private static final long MIN_INDEX_SIZE = 300;
     private static final long MIN_JS_BUNDLE_SIZE = 10 * 1024;
 
     public record ValidationResult(

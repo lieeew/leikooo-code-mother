@@ -56,7 +56,10 @@ public class StaticResourceController {
         }
         String decodedPath = URLDecoder.decode(resourcePath, StandardCharsets.UTF_8);
         Path basePath = Paths.get(PATH, deployKey, "current").toAbsolutePath().normalize();
-        Path targetPath = basePath.resolve(decodedPath.replaceFirst("^/", "")).toAbsolutePath().normalize();
+        Path targetPath = basePath
+                .resolve(sanitizePath(decodedPath))
+                .toAbsolutePath()
+                .normalize();
         if (!targetPath.startsWith(basePath)) {
             return new ResponseEntity<>(HttpStatus.FORBIDDEN);
         }
@@ -68,6 +71,11 @@ public class StaticResourceController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_TYPE, getContentTypeWithCharset(targetPath.toString()))
                 .body(resource);
+    }
+
+    private static String sanitizePath(String path) {
+        // 移除开头的 / 或 \
+        return path.replaceFirst("^[/\\\\]+", "");
     }
 
     private String getContentTypeWithCharset(String filePath) {

@@ -12,17 +12,14 @@ import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisor;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisorChain;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
-import java.util.concurrent.Executor;
-
 /**
  * 构建 Advisor
  * 作用：在 AI 流完成后异步执行构建并更新状态
- * 顺序：order=MAX-300（outer，doOnComplete 在 VersionAdvisor 之后触发）
+ * 顺序：order=50（outer，doOnComplete 在 VersionAdvisor 之后触发）
  */
 @Slf4j
 @Component
@@ -67,7 +64,7 @@ public class BuildAdvisor implements CallAdvisor, StreamAdvisor {
 
     @Override
     public int getOrder() {
-        return Integer.MAX_VALUE - 300;
+        return 50;
     }
 
     @Override
@@ -75,3 +72,6 @@ public class BuildAdvisor implements CallAdvisor, StreamAdvisor {
         return chain.nextCall(request);
     }
 }
+
+
+

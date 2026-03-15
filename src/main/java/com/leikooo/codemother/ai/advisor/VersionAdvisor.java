@@ -17,7 +17,7 @@ import reactor.core.publisher.Flux;
 /**
  * 版本保存 Advisor
  * 作用：在 AI 流完成后保存版本快照
- * 顺序：order=MAX-200（inner，doOnComplete 先触发，保证版本在构建前保存）
+ * 顺序：order=60（inner，doOnComplete 先触发，保证版本在构建前保存）
  */
 @Slf4j
 @Component
@@ -63,6 +63,9 @@ public class VersionAdvisor implements StreamAdvisor {
 
     @Override
     public int getOrder() {
-        return Integer.MAX_VALUE - 200;
+        return 60;
     }
 }
+
+
+
