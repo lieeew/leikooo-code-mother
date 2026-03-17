@@ -20,6 +20,7 @@ import reactor.core.publisher.Flux;
  * 构建 Advisor
  * 作用：在 AI 流完成后异步执行构建并更新状态
  * 顺序：order=50（outer，doOnComplete 在 VersionAdvisor 之后触发）
+ * @author leikooo
  */
 @Slf4j
 @Component

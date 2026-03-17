@@ -5,6 +5,7 @@ import com.leikooo.codemother.model.enums.ChatHistoryMessageTypeEnum;
 import com.leikooo.codemother.service.ChatHistoryService;
 import com.leikooo.codemother.utils.ConversationUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.chat.client.ChatClientRequest;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
@@ -16,7 +17,6 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.SignalType;
 
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -54,12 +54,16 @@ public class MessageAggregatorAdvisor implements CallAdvisor, StreamAdvisor {
                             .collect(Collectors.joining());
                     resultCollector.append(text);
                 })
-                .doFinally(signalType -> updateUpdatedMessage(ConversationUtils.getChatContext(chatClientRequest.context()), resultCollector.toString()));
+                .doFinally(signalType -> saveMessages(ConversationUtils.getChatContext(chatClientRequest.context()), resultCollector.toString()));
     }
 
-    private void updateUpdatedMessage(ChatContext chatContext, String content) {
+    private void saveMessages(ChatContext chatContext, String content) {
         String appId = chatContext.appId();
         String userId = chatContext.userId();
+        if (StringUtils.isBlank(content)) {
+            log.info("用户 userId {} 保存 app {} 历史记录失败，content 为空", userId, appId);
+            return;
+        }
         chatHistoryService.addChatMessage(appId, content, ChatHistoryMessageTypeEnum.AI.getValue(), userId);
         log.info("用户 userId {} 保存 app {} 历史记录成功", userId, appId);
     }

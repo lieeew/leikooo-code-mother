@@ -11,6 +11,7 @@ import com.leikooo.codemother.ai.GenerationManager;
 import com.leikooo.codemother.constant.ResourcePathConstant;
 import com.leikooo.codemother.constant.UserConstant;
 import com.leikooo.codemother.event.AppCreatedEvent;
+import com.leikooo.codemother.event.AppScreenshotEvent;
 import com.leikooo.codemother.exception.BusinessException;
 import com.leikooo.codemother.exception.ErrorCode;
 import com.leikooo.codemother.exception.ThrowUtils;
@@ -104,6 +105,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         String appId = updateGenApp.getAppId();
         return aiChatClient.generateCode(updateGenApp)
                 .doOnSubscribe(subscription -> generationManager.register(appId, subscription::cancel))
+                .doOnComplete(() -> {
+                    try {
+                        eventPublisher.publishEvent(new AppScreenshotEvent(this, Long.parseLong(appId)));
+                    } catch (Exception e) {
+                        log.error("[Screenshot] 发布截图事件失败: appId={}", appId, e);
+                    }
+                })
                 .doFinally(signalType -> generationManager.cancel(appId));
     }
 

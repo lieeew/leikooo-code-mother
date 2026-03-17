@@ -62,6 +62,7 @@ public class ExecuteToolAdvisor implements StreamAdvisor {
             .maximumSize(10_00)
             .expireAfterWrite(Duration.ofMinutes(30))
             .build();
+            
     @Resource
     private ToolCallingManager toolCallingManager;
 

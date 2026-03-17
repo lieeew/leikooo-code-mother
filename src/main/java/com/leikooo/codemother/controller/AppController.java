@@ -106,7 +106,9 @@ public class AppController {
                                 .event("done")
                                 .data("")
                                 .build()
-                )).doFinally(signalType -> {
+                ))
+                .doOnComplete(() -> System.out.println("leikooo = leikooo"))
+                .doFinally(signalType -> {
                     // doFinally
                     System.out.println("signalType = " + signalType);
                 });
