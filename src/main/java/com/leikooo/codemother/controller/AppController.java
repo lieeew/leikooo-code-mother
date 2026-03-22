@@ -11,6 +11,8 @@ import com.leikooo.codemother.commen.BaseResponse;
 import com.leikooo.codemother.commen.DeleteRequest;
 import com.leikooo.codemother.commen.ResultUtils;
 import com.leikooo.codemother.constant.AppConstant;
+import com.leikooo.codemother.event.AppDeletedEvent;
+import com.leikooo.codemother.event.AppUpdatedEvent;
 import com.leikooo.codemother.constant.ResourcePathConstant;
 import com.leikooo.codemother.constant.UserConstant;
 import com.leikooo.codemother.exception.BusinessException;
@@ -30,6 +32,7 @@ import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.service.AppService;
 import com.leikooo.codemother.service.AppSourceService;
 import com.leikooo.codemother.service.AppVersionService;
+import com.leikooo.codemother.service.SubAgentService;
 import com.leikooo.codemother.service.UserService;
 import com.leikooo.codemother.utils.UuidV7Generator;
 import jakarta.servlet.http.HttpServletRequest;
@@ -37,6 +40,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -68,13 +72,17 @@ public class AppController {
     private final GenerationManager generationManager;
     private final AppVersionService appVersionService;
     private final AppSourceService appSourceService;
+    private final SubAgentService subAgentService;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public AppController(AppService appService, UserService userService, GenerationManager generationManager, AppVersionService appVersionService, AppSourceService appSourceService) {
+    public AppController(AppService appService, UserService userService, GenerationManager generationManager, AppVersionService appVersionService, AppSourceService appSourceService, SubAgentService subAgentService, ApplicationEventPublisher eventPublisher) {
         this.appService = appService;
         this.userService = userService;
         this.generationManager = generationManager;
         this.appVersionService = appVersionService;
         this.appSourceService = appSourceService;
+        this.subAgentService = subAgentService;
+        this.eventPublisher = eventPublisher;
     }
 
     @PostMapping("/add")
@@ -242,7 +250,11 @@ public class AppController {
         // 判断是否存在
         App oldApp = appService.getById(id);
         ThrowUtils.throwIf(oldApp == null, ErrorCode.NOT_FOUND_ERROR);
+        Integer deletedAppPriority = oldApp.getPriority();
         boolean result = appService.removeById(id);
+        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        // 发布应用删除事件，触发缓存失效
+        eventPublisher.publishEvent(new AppDeletedEvent(this, id, deletedAppPriority));
         return ResultUtils.success(result);
     }
 
@@ -262,10 +274,13 @@ public class AppController {
         // 判断是否存在
         App oldApp = appService.getById(id);
         ThrowUtils.throwIf(oldApp == null, ErrorCode.NOT_FOUND_ERROR);
+        Integer oldPriority = oldApp.getPriority();
         App app = new App();
         BeanUtil.copyProperties(appAdminUpdateRequest, app);
         boolean result = appService.updateById(app);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        // 发布应用更新事件，触发缓存失效
+        eventPublisher.publishEvent(new AppUpdatedEvent(this, id, oldPriority, appAdminUpdateRequest.getPriority()));
         return ResultUtils.success(true);
     }
 
@@ -294,6 +309,20 @@ public class AppController {
         ThrowUtils.throwIf(appId == null, ErrorCode.PARAMS_ERROR);
         String errorMessage = appVersionService.getFixErrorMessage(appId);
         return ResultUtils.success(errorMessage);
+    }
+
+    /**
+     * SubAgent 自动修复循环 SSE 端点
+     * 实现 AI 修复 -> build -> validate -> 失败则重试 的循环
+     * 
+     * @param appId 应用 ID
+     * @return SSE 事件流
+     */
+    @GetMapping(value = "/sub-agent/fix", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> fixAppWithSubAgent(@RequestParam(name = "appId") Long appId) {
+        ThrowUtils.throwIf(appId == null, ErrorCode.PARAMS_ERROR);
+        UserVO user = userService.getUserLogin();
+        return subAgentService.executeFixLoop(appId.toString(), user);
     }
 
     @PostMapping("/runtime-check")

@@ -38,12 +38,13 @@
           type="primary"
           danger
           @click="fixError"
-          :loading="isFixing"
+          :loading="isFixing || isSubAgentRunning"
+          :disabled="isSubAgentRunning"
         >
           <template #icon>
             <ToolOutlined />
           </template>
-          修复错误
+          {{ isSubAgentRunning ? '修复中...' : '修复错误' }}
         </a-button>
       </div>
     </div>
@@ -78,6 +79,58 @@
                   <span>AI 正在思考...</span>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SubAgent 可折叠修复进度面板 -->
+        <div v-if="isSubAgentRunning || subAgentResult" class="sub-agent-panel">
+          <div class="sub-agent-header" @click="toggleSubAgentPanel">
+            <div class="sub-agent-title">
+              <ToolOutlined />
+              <span>自动修复进度</span>
+              <a-tag :color="getSubAgentStatusColor()" size="small">
+                {{ getSubAgentStatusText() }}
+              </a-tag>
+              <span v-if="subAgentPhase !== 'idle'" class="sub-agent-phase-info">
+                {{ subAgentPhase === 'fixing' ? '🔧 AI 修复中' : '🏗️ 构建中' }} 
+                (第 {{ subAgentAttempt }} 次)
+              </span>
+            </div>
+            <div class="sub-agent-actions">
+              <a-button 
+                v-if="isSubAgentRunning" 
+                type="text" 
+                danger 
+                size="small"
+                @click.stop="cancelSubAgent"
+              >
+                取消
+              </a-button>
+              <DownOutlined 
+                :class="{ 'arrow-rotated': !subAgentExpanded }" 
+                class="collapse-arrow"
+              />
+            </div>
+          </div>
+          <div v-show="subAgentExpanded" class="sub-agent-content">
+            <div class="sub-agent-stream">
+              <MarkdownRenderer v-if="subAgentContent" :content="subAgentContent" />
+              <div v-else class="sub-agent-loading">
+                <a-spin size="small" />
+                <span>等待 AI 开始修复...</span>
+              </div>
+            </div>
+            <!-- 构建结果 -->
+            <div v-if="subAgentBuildLog" class="sub-agent-build-log">
+              <div class="build-log-header">构建日志:</div>
+              <pre class="build-log-content">{{ subAgentBuildLog }}</pre>
+            </div>
+            <!-- 完成状态 -->
+            <div v-if="subAgentResult" class="sub-agent-result" :class="{ 'result-success': subAgentResult.success, 'result-failure': !subAgentResult.success }">
+              <CheckCircleOutlined v-if="subAgentResult.success" />
+              <CloseCircleOutlined v-else />
+              <span>{{ subAgentResult.message || (subAgentResult.success ? '修复成功！' : '修复失败') }}</span>
             </div>
           </div>
         </div>
@@ -130,17 +183,17 @@
                 :rows="4"
                 :maxlength="1000"
                 @keydown.enter.prevent="sendMessage"
-                :disabled="isGenerating || !isOwner"
+                :disabled="isGenerating || isSubAgentRunning || !isOwner"
               />
             </a-tooltip>
             <a-textarea
               v-else
               v-model:value="userInput"
-              :placeholder="getInputPlaceholder()"
+              :placeholder="isSubAgentRunning ? 'SubAgent 运行中，请稍候...' : getInputPlaceholder()"
               :rows="4"
               :maxlength="1000"
               @keydown.enter.prevent="sendMessage"
-              :disabled="isGenerating"
+              :disabled="isGenerating || isSubAgentRunning"
             />
             <div class="input-actions">
               <a-button v-if="isGenerating" type="primary" danger @click="cancel">
@@ -154,7 +207,7 @@
                 type="primary"
                 @click="sendMessage"
                 :loading="isGenerating"
-                :disabled="!isOwner"
+                :disabled="!isOwner || isSubAgentRunning"
               >
                 <template #icon>
                   <SendOutlined />
@@ -322,6 +375,8 @@ import {
   CheckCircleOutlined,
   SyncOutlined,
   WarningOutlined,
+  DownOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons-vue'
 
 const route = useRoute()
@@ -368,6 +423,16 @@ const downloading = ref(false)
 const versions = ref<API.AppVersionVO[]>([])
 const isFixing = ref(false)
 const rollingBack = ref(false)
+
+// SubAgent 相关状态
+const isSubAgentRunning = ref(false)
+const subAgentPhase = ref<'idle' | 'fixing' | 'building'>('idle')
+const subAgentAttempt = ref(0)
+const subAgentContent = ref('')
+const subAgentExpanded = ref(true)
+const subAgentResult = ref<{success: boolean, attempts: number, message?: string} | null>(null)
+const subAgentBuildLog = ref('')
+const subAgentEventSource = ref<EventSource | null>(null)
 
 // 代码预览相关
 const activePreviewTab = ref('preview') // 'preview' | 'code'
@@ -473,24 +538,252 @@ const fetchVersions = async () => {
   }
 }
 
-// 修复错误
+// 修复错误 - SubAgent SSE 连接
 const fixError = async () => {
-  if (!appId.value || isFixing.value) return
-  isFixing.value = true
+  if (!appId.value || isSubAgentRunning.value) return
+
+  // 重置 SubAgent 状态
+  isSubAgentRunning.value = true
+  isGenerating.value = true
+  subAgentPhase.value = 'idle'
+  subAgentAttempt.value = 0
+  subAgentContent.value = ''
+  subAgentExpanded.value = true
+  subAgentResult.value = null
+  subAgentBuildLog.value = ''
+
+  let eventSource: EventSource | null = null
+  let streamCompleted = false
+
   try {
-    const res = await getFixError({ appId: appId.value })
-    if (res.data.code === 0 && res.data.data) {
-      userInput.value = res.data.data
-      message.success('已获取修复建议')
-    } else {
-      message.error('获取修复建议失败：' + res.data.message)
+    // 获取 axios 配置的 baseURL
+    const baseURL = request.defaults.baseURL || API_BASE_URL
+    const url = `${baseURL}/app/sub-agent/fix?appId=${appId.value}`
+
+    // 创建 EventSource 连接
+    eventSource = new EventSource(url, {
+      withCredentials: true,
+    })
+    subAgentEventSource.value = eventSource
+
+    // 处理默认消息（AI 修复代码流式输出）
+    eventSource.onmessage = function (event) {
+      if (streamCompleted) return
+
+      try {
+        const parsed = JSON.parse(event.data)
+        const content = parsed.d
+
+        if (content !== undefined && content !== null) {
+          subAgentContent.value += content
+        }
+      } catch (error) {
+        console.error('SubAgent 解析消息失败:', error)
+      }
     }
+
+    // 处理 phase 事件
+    eventSource.addEventListener('phase', function (event: MessageEvent) {
+      if (streamCompleted) return
+
+      try {
+        const data = JSON.parse(event.data)
+        subAgentPhase.value = data.phase
+        subAgentAttempt.value = data.attempt
+      } catch (error) {
+        console.error('SubAgent phase 事件解析失败:', error)
+      }
+    })
+
+    // 处理 build-result 事件
+    eventSource.addEventListener('build-result', function (event: MessageEvent) {
+      if (streamCompleted) return
+
+      try {
+        const data = JSON.parse(event.data)
+        subAgentBuildLog.value = data.log || ''
+      } catch (error) {
+        console.error('SubAgent build-result 事件解析失败:', error)
+      }
+    })
+
+    // 处理 done 事件
+    eventSource.addEventListener('done', async function (event: MessageEvent) {
+      if (streamCompleted) return
+
+      streamCompleted = true
+      eventSource?.close()
+      subAgentEventSource.value = null
+
+      try {
+        const data = JSON.parse(event.data)
+        const success = data.success
+        const totalAttempts = data.totalAttempts
+        const summary = data.summary
+        const aiContent = data.aiContent
+
+        // 记录结果
+        subAgentResult.value = {
+          success,
+          attempts: totalAttempts,
+          message: summary
+        }
+
+        // 在聊天区域插入 SubAgent 修复结果消息（作为 AI 回复）
+        messages.value.push({
+          type: 'ai',
+          content: summary || (success ? '自动修复完成！' : '自动修复失败'),
+        })
+        nextTick(() => scrollToBottom())
+
+        // 修复成功 → 刷新版本列表 + 预览
+        if (success) {
+          message.success('修复成功！')
+          await fetchVersions()
+          await updatePreview()
+          // 等待预览加载
+          for (let i = 0; i < 30; i++) {
+            const isAvailable = await checkPreviewUrlAvailable(previewUrl.value)
+            if (isAvailable) {
+              previewReady.value = true
+              break
+            }
+            await new Promise((resolve) => setTimeout(resolve, 3000))
+          }
+        } else {
+          message.warning('修复未能完全成功，请查看详情或手动修复')
+        }
+
+        // === 通知主 Agent：SubAgent 修复完成 ===
+        // 从 aiContent 中提取 [Fix Summary] 部分发给 /chat/gen/code
+        if (aiContent) {
+          // 提取 [Fix Summary] 部分
+          const fixSummaryMatch = aiContent.match(/\[Fix Summary\]([\s\S]*?)(?=Files modified:|$)/i)
+          const fixSummary = fixSummaryMatch ? `[Fix Summary]${fixSummaryMatch[1]}` : aiContent
+
+          // 将 fixSummary 作为用户消息添加到对话中
+          messages.value.push({
+            type: 'user',
+            content: fixSummary,
+          })
+
+          // 添加 AI 消息占位符
+          const aiMessageIndex = messages.value.length
+          messages.value.push({
+            type: 'ai',
+            content: '',
+            loading: true,
+          })
+
+          await nextTick()
+          scrollToBottom()
+
+          // 调用 /chat/gen/code 接口发送 fixSummary 给主 Agent
+          isGenerating.value = true
+          await notifyMainAgent(fixSummary, aiMessageIndex)
+        }
+
+      } catch (error) {
+        console.error('SubAgent done 事件解析失败:', error)
+      } finally {
+        isSubAgentRunning.value = false
+        isGenerating.value = false
+      }
+    })
+
+    // 处理错误事件
+    eventSource.addEventListener('error', function (event: MessageEvent) {
+      if (streamCompleted) return
+
+      try {
+        const data = JSON.parse(event.data)
+        message.error('SubAgent 错误: ' + (data.error || '未知错误'))
+      } catch (e) {
+        message.error('SubAgent 连接错误')
+      }
+
+      streamCompleted = true
+      eventSource?.close()
+      subAgentEventSource.value = null
+      isSubAgentRunning.value = false
+      isGenerating.value = false
+    })
+
+    // 处理 EventSource 错误
+    eventSource.onerror = function () {
+      if (streamCompleted) return
+
+      // 检查是否是正常的连接关闭
+      if (eventSource?.readyState === EventSource.CLOSED) {
+        streamCompleted = true
+        if (!subAgentResult.value) {
+          message.warning('SubAgent 连接已关闭')
+          isSubAgentRunning.value = false
+          isGenerating.value = false
+        }
+      }
+    }
+
   } catch (error) {
-    console.error('获取修复建议失败：', error)
-    message.error('获取修复建议失败')
-  } finally {
-    isFixing.value = false
+    console.error('创建 SubAgent EventSource 失败：', error)
+    message.error('启动修复失败，请重试')
+    isSubAgentRunning.value = false
+    isGenerating.value = false
   }
+}
+
+// 取消 SubAgent 修复
+const cancelSubAgent = async () => {
+  if (!appId.value || !isSubAgentRunning.value) return
+
+  try {
+    // 关闭 EventSource
+    if (subAgentEventSource.value) {
+      subAgentEventSource.value.close()
+      subAgentEventSource.value = null
+    }
+
+    // 调用后端取消
+    await cancelGeneration({ appId: appId.value })
+    message.success('已取消修复')
+
+    subAgentResult.value = {
+      success: false,
+      attempts: subAgentAttempt.value,
+      message: '用户取消修复'
+    }
+
+  } catch (error) {
+    console.error('取消 SubAgent 失败：', error)
+  } finally {
+    isSubAgentRunning.value = false
+    isGenerating.value = false
+  }
+}
+
+// 切换 SubAgent 面板折叠状态
+const toggleSubAgentPanel = () => {
+  subAgentExpanded.value = !subAgentExpanded.value
+}
+
+// 获取 SubAgent 状态颜色
+const getSubAgentStatusColor = () => {
+  if (subAgentResult.value) {
+    return subAgentResult.value.success ? 'success' : 'error'
+  }
+  if (subAgentPhase.value === 'fixing') return 'warning'
+  if (subAgentPhase.value === 'building') return 'processing'
+  return 'default'
+}
+
+// 获取 SubAgent 状态文本
+const getSubAgentStatusText = () => {
+  if (subAgentResult.value) {
+    return subAgentResult.value.success ? '已完成' : '失败'
+  }
+  if (subAgentPhase.value === 'fixing') return 'AI 修复中'
+  if (subAgentPhase.value === 'building') return '构建中'
+  return '等待开始'
 }
 
 // 版本点击处理
@@ -851,6 +1144,98 @@ const handleError = (error: unknown, aiMessageIndex: number) => {
   isGenerating.value = false
 }
 
+// 通知主 Agent：SubAgent 修复完成
+// 通过 /chat/gen/code 接口发送消息，让主 Agent 感知到修复状态
+const notifyMainAgent = async (reportMessage: string, aiMessageIndex: number) => {
+  let eventSource: EventSource | null = null
+  let streamCompleted = false
+
+  try {
+    const baseURL = request.defaults.baseURL || API_BASE_URL
+    const params = new URLSearchParams({
+      appId: appId.value || '',
+      message: reportMessage,
+    })
+    const url = `${baseURL}/app/chat/gen/code?${params}`
+
+    eventSource = new EventSource(url, {
+      withCredentials: true,
+    })
+
+    let fullContent = ''
+
+    // 处理接收到的消息
+    eventSource.onmessage = function (event) {
+      if (streamCompleted) return
+
+      try {
+        const parsed = JSON.parse(event.data)
+        const content = parsed.d
+
+        if (content !== undefined && content !== null) {
+          fullContent += content
+          if (messages.value[aiMessageIndex]) {
+            messages.value[aiMessageIndex].content = fullContent
+            messages.value[aiMessageIndex].loading = false
+            scrollToBottom()
+          }
+        }
+      } catch (error) {
+        console.error('[notifyMainAgent] 解析消息失败:', error)
+      }
+    }
+
+    // 处理 done 事件
+    eventSource.addEventListener('done', function () {
+      if (streamCompleted) return
+
+      streamCompleted = true
+      eventSource?.close()
+
+      // 刷新版本状态
+      pollVersionStatus()
+    })
+
+    // 轮询检查版本状态
+    const pollVersionStatus = async (maxRetries = 10, interval = 1000) => {
+      for (let i = 0; i < maxRetries; i++) {
+        await fetchVersions()
+        const latestVersion = versions.value[versions.value.length - 1]
+        if (latestVersion?.status !== null && latestVersion?.status !== undefined) {
+          await fetchAppInfo()
+          isGenerating.value = false
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, interval))
+      }
+      await fetchAppInfo()
+      isGenerating.value = false
+    }
+
+    // 处理错误
+    eventSource.onerror = function () {
+      if (streamCompleted) return
+
+      if (eventSource?.readyState === EventSource.CLOSED) {
+        streamCompleted = true
+        isGenerating.value = false
+        eventSource?.close()
+        setTimeout(async () => {
+          await fetchAppInfo()
+        }, 1000)
+      }
+    }
+
+  } catch (error) {
+    console.error('[notifyMainAgent] 通知主 Agent 失败:', error)
+    if (messages.value[aiMessageIndex]) {
+      messages.value[aiMessageIndex].content = '通知主 Agent 失败'
+      messages.value[aiMessageIndex].loading = false
+    }
+    isGenerating.value = false
+  }
+}
+
 // 更新预览
 const updatePreview = () => {
   if (appId.value) {
@@ -1022,6 +1407,11 @@ onUnmounted(() => {
   // EventSource 会在组件卸载时自动清理
   if (isGenerating.value) {
     cancel()
+  }
+  // 清理 SubAgent EventSource
+  if (subAgentEventSource.value) {
+    subAgentEventSource.value.close()
+    subAgentEventSource.value = null
   }
 })
 
@@ -1314,6 +1704,122 @@ const onPreviewTabChange = async (key: string) => {
 
 .selected-element-alert {
   margin: 0 16px;
+}
+
+/* SubAgent 修复面板 */
+.sub-agent-panel {
+  margin: 0 16px 8px 16px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+.sub-agent-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #fa8c16 0%, #faad14 100%);
+  color: white;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sub-agent-header:hover {
+  background: linear-gradient(135deg, #fa8c16 0%, #ffc53d 100%);
+}
+
+.sub-agent-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.sub-agent-phase-info {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.sub-agent-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collapse-arrow {
+  transition: transform 0.3s ease;
+  font-size: 12px;
+}
+
+.collapse-arrow.arrow-rotated {
+  transform: rotate(-90deg);
+}
+
+.sub-agent-content {
+  padding: 12px 16px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.sub-agent-stream {
+  margin-bottom: 12px;
+}
+
+.sub-agent-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #999;
+  font-size: 13px;
+}
+
+.sub-agent-build-log {
+  background: #1e1e1e;
+  border-radius: 4px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.build-log-header {
+  color: #ccc;
+  font-size: 12px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.build-log-content {
+  color: #67c23a;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 150px;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.sub-agent-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.sub-agent-result.result-success {
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+  color: #52c41a;
+}
+
+.sub-agent-result.result-failure {
+  background: #fff2f0;
+  border: 1px solid #ffccc7;
+  color: #ff4d4f;
 }
 
 /* 版本边栏 */

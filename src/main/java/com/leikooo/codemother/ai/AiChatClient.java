@@ -30,16 +30,16 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 public class AiChatClient {
     private final ChatClient chatClient;
     private final ChatClient simpleChatClient;
+    private final ChatClient fixChatClient;
     private final JdbcChatMemoryRepository chatMemoryRepository;
-    private final FileTools fileTools;
 
     public AiChatClient(@Qualifier("codeGenChatClient") ChatClient chatClient,
                         @Qualifier("simpleChatClient") ChatClient simpleChatClient,
-                        FileTools fileTools,
+                        @Qualifier("fixChatClient") ChatClient fixChatClient,
                         JdbcChatMemoryRepository chatMemoryRepository) {
         this.chatClient = chatClient;
         this.simpleChatClient = simpleChatClient;
-        this.fileTools = fileTools;
+        this.fixChatClient = fixChatClient;
         this.chatMemoryRepository = chatMemoryRepository;
     }
 
@@ -85,22 +85,21 @@ public class AiChatClient {
     }
 
     /**
-     * 用来修复代码
+     * 用来修复代码（SubAgent 使用）
+     * 使用 fixChatClient bean（已在配置中设置 MessageChatMemoryAdvisor + FileTools）
      * @param genAppDto genAppDto
-     * @return
+     * @return Flux<String> 流式输出
      */
     public Flux<String> fixCode(GenAppDto genAppDto) {
         String userId = genAppDto.getUserLogin().getId();
         String appId = genAppDto.getAppId();
-        return simpleChatClient.prompt()
+        return fixChatClient.prompt()
                 .user(genAppDto.getMessage())
-                .system(new ClassPathResource("prompt/build-advisor-system-prompt.md"), UTF_8)
-                .advisors(MessageChatMemoryAdvisor
-                        .builder(MessageWindowChatMemory.builder()
-                                .maxMessages(100)
-                                .build())
-                        .build())
-                .tools(fileTools)
+                .advisors(advisorSpec -> {
+                    advisorSpec.param(GEN_APP_INFO, new ChatContext(appId, userId));
+                    advisorSpec.param(CONVERSATION_ID, appId);
+                })
+                .system(new ClassPathResource("prompt/fix-code-system-prompt.md"), UTF_8)
                 .toolContext(Map.of(CONVERSATION_ID, appId, GEN_APP_INFO, new ToolsContext(appId, userId)))
                 .stream().content();
     }

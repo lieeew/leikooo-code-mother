@@ -3,6 +3,7 @@ package com.leikooo.codemother.ai;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -31,5 +32,16 @@ public class GenerationManager {
 
     public boolean isGenerating(String conversationId) {
         return activeGenerations.containsKey(conversationId);
+    }
+
+    /**
+     * 生成 SubAgent 的唯一 key
+     * 格式: {appId}_subagent_{uuid前5位}
+     *
+     * @param appId 应用 ID
+     * @return 唯一的 SubAgent key
+     */
+    public String generateSubAgentKey(String appId) {
+        return String.format("%s_subagent_%s", appId, UUID.randomUUID().toString().substring(0, 5));
     }
 }

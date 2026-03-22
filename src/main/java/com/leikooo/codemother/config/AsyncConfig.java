@@ -54,4 +54,33 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    /**
+     * SubAgent 修复循环专用线程池
+     */
+    @Bean("fixExecutor")
+    public Executor fixExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(10);
+        executor.setThreadNamePrefix("sub-agent-fix-");
+        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
+    }
+
+    /**
+     * 通用缓存失效线程池
+     */
+    @Bean("cacheEvictExecutor")
+    public Executor cacheEvictExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("cache-evict-");
+        executor.initialize();
+        return executor;
+    }
 }

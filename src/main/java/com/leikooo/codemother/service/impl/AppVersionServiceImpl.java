@@ -82,6 +82,7 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
                 .eq(AppVersion::getAppId, appId)
                 .eq(AppVersion::getIsDelete, 0)
                 .orderByDesc(AppVersion::getVersionNum)
+                .last("LIMIT 1")
                 .one();
         return maxVersion != null ? maxVersion.getVersionNum() : 0;
     }

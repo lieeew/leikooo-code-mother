@@ -24,4 +24,6 @@ public class CacheConfig {
                     .expireAfterWrite(1, TimeUnit.HOURS));
         }};
     }
+
+    public static final String GOOD_APP_PAGE_CACHE = "good_app_page";
 }

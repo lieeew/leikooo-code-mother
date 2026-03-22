@@ -39,7 +39,7 @@ public class FileTools extends BaseTools {
 
     private static final Cache<String, String> GEN_TYPE_CACHE = Caffeine.newBuilder()
             .maximumSize(100)
-            .expireAfterWrite(Duration.ofMinutes(30))
+            .expireAfterWrite(Duration.ofHours(1))
             .build();
 
     private static final String HTML_EXTENSION = ".html";

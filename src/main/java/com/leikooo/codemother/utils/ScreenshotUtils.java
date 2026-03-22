@@ -139,7 +139,7 @@ public final class ScreenshotUtils {
 
     private static boolean waitForServerReady(int port) {
         HttpClient client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(30))
+                .connectTimeout(Duration.ofSeconds(60))
                 .build();
         String url = "http://" + LOCALHOST + ":" + port;
 
