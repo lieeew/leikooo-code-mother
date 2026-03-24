@@ -1,16 +1,13 @@
 package com.leikooo.codemother.service.impl;
 
-import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leikooo.codemother.ai.AiChatClient;
 import com.leikooo.codemother.ai.GenerationManager;
-import com.leikooo.codemother.exception.ErrorCode;
-import com.leikooo.codemother.exception.ThrowUtils;
+import com.leikooo.codemother.constant.ResourcePathConstant;
 import com.leikooo.codemother.model.dto.GenAppDto;
-import com.leikooo.codemother.model.enums.BuildResultEnum;
-import com.leikooo.codemother.model.enums.ChatHistoryMessageTypeEnum;
-import com.leikooo.codemother.model.enums.ChatHistoryMessageTypeEnum;
-import com.leikooo.codemother.model.enums.VersionStatusEnum;
+import com.leikooo.codemother.model.entity.AppVersion;
+import com.leikooo.codemother.model.enums.*;
 import com.leikooo.codemother.model.vo.UserVO;
 import com.leikooo.codemother.service.AppVersionService;
 import com.leikooo.codemother.service.ChatHistoryService;
@@ -25,6 +22,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
@@ -34,11 +32,9 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.leikooo.codemother.model.enums.ChatHistoryMessageTypeEnum.AI;
 import static java.util.concurrent.TimeUnit.MINUTES;
 
 /**
@@ -52,6 +48,12 @@ public class SubAgentServiceImpl implements SubAgentService {
 
     private static final int MAX_ATTEMPTS = 3;
     private static final long AI_TIMEOUT_MINUTES = 30;
+    private static final String METADATA_FILE = "metadata.json";
+    private static final String BUG_PREFIX = "遇到了下面的 BUG: ";
+    private static final int ERROR_SUMMARY_MAX_LENGTH = 200;
+    private static final String UNKNOWN_ERROR = "未知错误";
+    private static final String BUILD_VALIDATION_SEPARATOR = "\n\n=== Build Output Validation Failed ===\n";
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final AiChatClient aiChatClient;
     private final AppVersionService appVersionService;
@@ -72,278 +74,330 @@ public class SubAgentServiceImpl implements SubAgentService {
         this.fixExecutor = fixExecutor;
     }
 
+    private record AiFixResult(boolean success, String errorMessage) {
+    }
+
+    private record BuildValidationResult(boolean success, String errorLog) {
+    }
+
+    private record DoneEventPayload(boolean success, int totalAttempts, String summary, String aiContent) {
+    }
+
+    /**
+     * 修复循环生命周期上下文，贯穿 doFixLoop 全链路
+     */
+    private static class FixLoopContext {
+        private final FluxSink<ServerSentEvent<String>> sink;
+        private final String appId;
+        private final UserVO user;
+        private final AtomicBoolean cancelled = new AtomicBoolean(false);
+        private final StringBuilder aiContent = new StringBuilder();
+
+        FixLoopContext(FluxSink<ServerSentEvent<String>> sink, String appId, UserVO user) {
+            this.sink = sink;
+            this.appId = appId;
+            this.user = user;
+        }
+
+        boolean isStopped() {
+            return cancelled.get() || sink.isCancelled();
+        }
+
+        String aiContentAsString() {
+            return aiContent.toString();
+        }
+    }
+
+    /**
+     * AI 流式修复的上下文，封装 sink 输出 + 异步同步状态
+     */
+    private static class FixStreamContext {
+        private final FluxSink<ServerSentEvent<String>> sink;
+        private final StringBuilder aiContent;
+        private final CountDownLatch latch = new CountDownLatch(1);
+        private final AtomicBoolean hasError = new AtomicBoolean(false);
+        private final AtomicReference<String> errorMessage = new AtomicReference<>();
+
+        FixStreamContext(FixLoopContext loopContext) {
+            this.sink = loopContext.sink;
+            this.aiContent = loopContext.aiContent;
+        }
+
+        void markError(String message) {
+            hasError.set(true);
+            errorMessage.set(message);
+            latch.countDown();
+        }
+
+        void markComplete() {
+            latch.countDown();
+        }
+
+        AiFixResult toResult(boolean completedInTime) {
+            if (!completedInTime) {
+                return new AiFixResult(false, "AI 修复超时");
+            }
+            if (hasError.get()) {
+                return new AiFixResult(false, errorMessage.get());
+            }
+            return new AiFixResult(true, null);
+        }
+    }
+
     @Override
     public Flux<ServerSentEvent<String>> executeFixLoop(String appId, UserVO user) {
-        // 生成唯一的 SubAgent key
-        final String subAgentId = generationManager.generateSubAgentKey(appId);
-
         return Flux.create(sink -> {
-            // 注册取消能力
-            AtomicBoolean cancelled = new AtomicBoolean(false);
-            sink.onCancel(() -> {
-                log.info("[SubAgent] SSE 连接取消: subAgentId={}", subAgentId);
-                cancelled.set(true);
-            });
-            sink.onDispose(() -> {
-                log.info("[SubAgent] SSE 连接释放: subAgentId={}", subAgentId);
-                cancelled.set(true);
-            });
-            generationManager.register(subAgentId, () -> cancelled.set(true));
-
-            // 后台线程驱动循环
+            final FixLoopContext context = new FixLoopContext(sink, appId, user);
             CompletableFuture.runAsync(() -> {
                 try {
-                    doFixLoop(sink, appId, subAgentId, user, cancelled);
+                    doFixLoop(context);
                 } catch (Exception e) {
-                    log.error("[SubAgent] 修复循环异常: subAgentId={}", subAgentId, e);
-                    if (!sink.isCancelled()) {
-                        sink.next(errorEvent(e.getMessage()));
-                        sink.complete();
-                    }
-                } finally {
-                    generationManager.cancel(subAgentId);
+                    log.error("[SubAgent] 修复循环异常: subAgentAppId={}", appId, e);
+                    emitErrorAndComplete(context);
                 }
             }, fixExecutor);
         }, FluxSink.OverflowStrategy.BUFFER);
     }
 
-    private void doFixLoop(FluxSink<ServerSentEvent<String>> sink,
-                           String appId, String subAgentId, UserVO user,
-                           AtomicBoolean cancelled) {
-        // 首次从 metadata 获取错误信息
-        String errorMsg = appVersionService.getFixErrorMessage(Long.parseLong(appId));
 
-        StringBuilder aiContent = new StringBuilder();
+    /**
+     * 修复主循环
+     */
+    private void doFixLoop(FixLoopContext context) {
+        String errorMsg = appVersionService.getFixErrorMessage(Long.parseLong(context.appId));
         String lastErrorLog = "";
 
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-            if (cancelled.get() || sink.isCancelled()) {
-                sink.next(doneEvent(false, attempt - 1, "用户取消", null));
-                sink.complete();
+            if (context.isStopped()) {
+                emitCancelledAndComplete(context, attempt - 1);
                 return;
             }
-
-            // 捕获当前 attempt 值供 lambda 使用
-            final int currentAttempt = attempt;
-
-            // ── Phase 1: AI 修复（流式） ──
-            sink.next(phaseEvent("fixing", currentAttempt));
-
-            // 使用唯一的 subAgentId 作为 conversationId
-            GenAppDto dto = new GenAppDto(errorMsg, appId, user);
-            CountDownLatch latch = new CountDownLatch(1);
-            AtomicBoolean aiError = new AtomicBoolean(false);
-            AtomicReference<String> errorHolder = new AtomicReference<>();
-
-            aiChatClient.fixCode(dto)
-                    .doOnNext(chunk -> {
-                        log.info("error chuck = {}", chunk);
-                        if (!sink.isCancelled()) {
-                            aiContent.append(chunk);
-                            sink.next(dataEvent(chunk));
-                        }
-                    })
-                    .doOnError(e -> {
-                        log.error("[SubAgent] AI 修复出错: appId={}, attempt={}", appId, currentAttempt, e);
-                        aiError.set(true);
-                        errorHolder.set(e.getMessage());
-                        latch.countDown();
-                    })
-                    .doOnComplete(latch::countDown)
-                    .subscribe();
-
-            // 阻塞等待 AI 流式输出完成（带超时保护）
-            boolean completed;
-            try {
-                completed = latch.await(AI_TIMEOUT_MINUTES, MINUTES);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                completed = false;
-            }
-
-            if (!completed || aiError.get()) {
-                String errMsg = !completed ? "AI 修复超时" : errorHolder.get();
-                log.warn("[SubAgent] AI 修复失败: appId={}, attempt={}, reason={}", appId, currentAttempt, errMsg);
-                sink.next(buildResultEvent(false, currentAttempt, errMsg));
+            final AiFixResult aiResult = streamAiFix(context, errorMsg, attempt);
+            if (!aiResult.success()) {
+                context.sink.next(buildResultEvent(false, attempt, aiResult.errorMessage()));
                 continue;
             }
-
-            // ── Phase 2: 构建 ──
-            sink.next(phaseEvent("building", currentAttempt));
-
-            String projectPath = ProjectPathUtils.getProjectPath(appId);
-            VueBuildUtils.BuildResult buildResult = VueBuildUtils.buildVueProject(projectPath, appId);
-            BuildResultEnum buildResultEnum = BuildResultEnum.fromExitCode(buildResult.exitCode());
-
-            // ── Phase 3: 校验 ──
-            boolean success = false;
-            String newErrorLog = "";
-
-            if (buildResultEnum == BuildResultEnum.SUCCESS) {
-                BuildOutputValidator.ValidationResult validation =
-                        BuildOutputValidator.ValidationResult.validateVueBuild(projectPath);
-                if (validation.valid()) {
-                    success = true;
-                } else {
-                    newErrorLog = buildResult.fullLog() + "\n\n=== Build Output Validation Failed ===\n" + validation.summary();
-                }
-            } else {
-                newErrorLog = buildResult.fullLog();
-            }
-
-            sink.next(buildResultEvent(success, currentAttempt, success ? "构建成功" : newErrorLog));
-            lastErrorLog = newErrorLog;
-
-            // ── 结果判定 ──
-            if (success) {
-                // 更新版本状态为 SUCCESS
-                updateVersionStatus(appId, VersionStatusEnum.SUCCESS);
-                String summary = buildFixSummary(true, currentAttempt, aiContent.toString(), null);
-                sink.next(doneEvent(true, currentAttempt, summary, aiContent.toString()));
-                sink.complete();
+            final BuildValidationResult buildResult = buildAndValidate(context.sink, context.appId, attempt);
+            lastErrorLog = buildResult.errorLog();
+            if (buildResult.success()) {
+                emitFixSuccess(context, attempt);
                 return;
             }
-
-            // 用新的构建错误直接作为下次 AI 输入
-            errorMsg = "遇到了下面的 BUG: " + newErrorLog;
-            // 同时持久化到 metadata
-            updateMetadataErrorLog(appId, newErrorLog);
+            errorMsg = BUG_PREFIX + buildResult.errorLog();
+            updateMetadataFields(context.appId, Map.of("errorLog", buildResult.errorLog()));
         }
-
-        // 所有尝试耗尽
-        String summary = buildFixSummary(false, MAX_ATTEMPTS, aiContent.toString(), lastErrorLog);
-        chatHistoryService.addChatMessage(
-                appId, summary,
-                ChatHistoryMessageTypeEnum.AI.getValue(),
-                user.getId()
-        );
-        sink.next(doneEvent(false, MAX_ATTEMPTS, summary, aiContent.toString()));
-        sink.complete();
+        emitAllAttemptsExhausted(context, lastErrorLog);
     }
 
-    private String buildFixSummary(boolean success, int attempts, String aiContent, String lastError) {
-        if (success) {
-            return String.format(
-                    "[自动修复完成] 经过 %d 次尝试，已成功修复构建错误并通过验证。",
-                    attempts);
-        } else {
-            // 截取关键错误信息，避免摘要过长
-            String truncatedError = lastError != null && lastError.length() > 200
-                    ? lastError.substring(0, 200) + "..."
-                    : (lastError != null ? lastError : "未知错误");
-            return String.format(
-                    "[自动修复失败] 经过 %d 次尝试未能修复。最后错误：%s",
-                    attempts, truncatedError);
-        }
+    /**
+     * Phase 1: AI 流式修复
+     */
+    private AiFixResult streamAiFix(FixLoopContext context, String errorMsg, int attempt) {
+        context.sink.next(phaseEvent(FixPhaseEnum.FIXING, attempt));
+        final GenAppDto dto = new GenAppDto(errorMsg, context.appId, context.user);
+        final FixStreamContext streamContext = new FixStreamContext(context);
+        subscribeAiFixStream(streamContext, dto, attempt);
+        final boolean completed = awaitWithTimeout(streamContext.latch);
+        return streamContext.toResult(completed);
     }
 
-    private void updateVersionStatus(String appId, VersionStatusEnum status) {
+    private void subscribeAiFixStream(FixStreamContext context, GenAppDto dto, int attempt) {
+        aiChatClient.fixCode(dto)
+                .doOnNext(chunk -> {
+                    if (!context.sink.isCancelled()) {
+                        context.aiContent.append(chunk);
+                        context.sink.next(dataEvent(chunk));
+                    }
+                })
+                .doOnError(e -> {
+                    log.error("[SubAgent] AI 修复出错: appId={}, attempt={}", dto.getAppId(), attempt, e);
+                    context.markError(e.getMessage());
+                })
+                .doOnComplete(context::markComplete)
+                .subscribe();
+    }
+
+    private boolean awaitWithTimeout(CountDownLatch latch) {
         try {
-            Long appIdLong = Long.parseLong(appId);
-            Integer versionNum = appVersionService.getMaxVersionNum(appIdLong);
+            return latch.await(AI_TIMEOUT_MINUTES, MINUTES);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
 
-            Path versionPath = Paths.get(
-                    com.leikooo.codemother.constant.ResourcePathConstant.GENERATED_APPS_DIR,
-                    appId, "v" + versionNum);
-            Path metadataPath = versionPath.resolve("metadata.json");
+    /**
+     * Phase 2 + 3: 构建 & 校验
+     */
+    private BuildValidationResult buildAndValidate(FluxSink<ServerSentEvent<String>> sink,
+                                                   String appId, int attempt) {
+        sink.next(phaseEvent(FixPhaseEnum.BUILDING, attempt));
+        final String projectPath = ProjectPathUtils.getProjectPath(appId);
+        final VueBuildUtils.BuildResult buildResult = VueBuildUtils.buildVueProject(projectPath, appId);
+        final BuildResultEnum buildResultEnum = BuildResultEnum.fromExitCode(buildResult.exitCode());
+        if (buildResultEnum != BuildResultEnum.SUCCESS) {
+            sink.next(buildResultEvent(false, attempt, buildResult.fullLog()));
+            return new BuildValidationResult(false, buildResult.fullLog());
+        }
+        final BuildOutputValidator.ValidationResult validation =
+                BuildOutputValidator.ValidationResult.validateVueBuild(projectPath);
+        if (!validation.valid()) {
+            final String errorLog = buildResult.fullLog() + BUILD_VALIDATION_SEPARATOR + validation.summary();
+            sink.next(buildResultEvent(false, attempt, errorLog));
+            return new BuildValidationResult(false, errorLog);
+        }
+        sink.next(buildResultEvent(true, attempt, "构建成功"));
+        return new BuildValidationResult(true, "");
+    }
 
-            if (java.nio.file.Files.exists(metadataPath)) {
-                com.fasterxml.jackson.databind.ObjectMapper objectMapper =
-                        new com.fasterxml.jackson.databind.ObjectMapper();
-                @SuppressWarnings("unchecked")
-                Map<String, Object> metadata = objectMapper.readValue(metadataPath.toFile(), Map.class);
-                metadata.put("status", status.name());
-                if (status == VersionStatusEnum.SUCCESS) {
-                    metadata.put("buildTime", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-                }
-                objectMapper.writerWithDefaultPrettyPrinter().writeValue(metadataPath.toFile(), metadata);
-            }
+    private void emitFixSuccess(FixLoopContext context, int attempt) {
+        updateVersionStatus(context.appId, VersionStatusEnum.SUCCESS);
+        final String summary = buildFixSummary(true, attempt, null);
+        context.sink.next(doneEvent(new DoneEventPayload(true, attempt, summary, context.aiContentAsString())));
+        context.sink.complete();
+    }
 
-            // 更新数据库
+    private void emitAllAttemptsExhausted(FixLoopContext context, String lastErrorLog) {
+        final String summary = buildFixSummary(false, MAX_ATTEMPTS, lastErrorLog);
+        chatHistoryService.addChatMessage(
+                context.appId, summary,
+                ChatHistoryMessageTypeEnum.AI.getValue(),
+                context.user.getId()
+        );
+        context.sink.next(doneEvent(new DoneEventPayload(false, MAX_ATTEMPTS, summary, context.aiContentAsString())));
+        context.sink.complete();
+    }
+
+    private void emitCancelledAndComplete(FixLoopContext context, int completedAttempts) {
+        context.sink.next(doneEvent(new DoneEventPayload(false, completedAttempts, "用户取消", null)));
+        context.sink.complete();
+    }
+
+    private void emitErrorAndComplete(FixLoopContext context) {
+        if (context.sink.isCancelled()) {
+            return;
+        }
+        context.sink.next(errorEvent(context.aiContentAsString()));
+        context.sink.complete();
+    }
+
+    /**
+     * 摘要构建
+     */
+    private String buildFixSummary(boolean success, int attempts, String lastError) {
+        if (success) {
+            return String.format("[自动修复完成] 经过 %d 次尝试，已成功修复构建错误并通过验证。", attempts);
+        }
+        final String truncatedError = truncateError(lastError);
+        return String.format("[自动修复失败] 经过 %d 次尝试未能修复。最后错误：%s", attempts, truncatedError);
+    }
+
+    private String truncateError(String error) {
+        if (error == null) {
+            return UNKNOWN_ERROR;
+        }
+        if (error.length() <= ERROR_SUMMARY_MAX_LENGTH) {
+            return error;
+        }
+        return error.substring(0, ERROR_SUMMARY_MAX_LENGTH) + "...";
+    }
+
+    /**
+     * 版本 & Metadata 操作
+     */
+    private void updateVersionStatus(String appId, VersionStatusEnum status) {
+        final Map<String, Object> updates = new HashMap<>();
+        updates.put("status", status.name());
+        if (status == VersionStatusEnum.SUCCESS) {
+            updates.put("buildTime", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        }
+        updateMetadataFields(appId, updates);
+        updateVersionStatusInDb(appId, status);
+    }
+
+    private void updateVersionStatusInDb(String appId, VersionStatusEnum status) {
+        try {
+            final Long appIdLong = Long.parseLong(appId);
+            final Integer versionNum = appVersionService.getMaxVersionNum(appIdLong);
             appVersionService.lambdaUpdate()
-                    .eq(com.leikooo.codemother.model.entity.AppVersion::getAppId, appIdLong)
-                    .eq(com.leikooo.codemother.model.entity.AppVersion::getVersionNum, versionNum)
-                    .set(com.leikooo.codemother.model.entity.AppVersion::getStatus, status.name())
+                    .eq(AppVersion::getAppId, appIdLong)
+                    .eq(AppVersion::getVersionNum, versionNum)
+                    .set(AppVersion::getStatus, status.name())
                     .update();
-
             log.info("[SubAgent] 更新版本状态: appId={}, version=v{}, status={}", appId, versionNum, status);
         } catch (Exception e) {
             log.error("[SubAgent] 更新版本状态失败: appId={}", appId, e);
         }
     }
 
-    private void updateMetadataErrorLog(String appId, String errorLog) {
+    private void updateMetadataFields(String appId, Map<String, Object> updates) {
         try {
-            Long appIdLong = Long.parseLong(appId);
-            int versionNum = appVersionService.getMaxVersionNum(appIdLong);
-
-            Path versionPath = Paths.get(
-                    com.leikooo.codemother.constant.ResourcePathConstant.GENERATED_APPS_DIR,
-                    appId, "v" + versionNum);
-            Path metadataPath = versionPath.resolve("metadata.json");
-
-            if (java.nio.file.Files.exists(metadataPath)) {
-                com.fasterxml.jackson.databind.ObjectMapper objectMapper =
-                        new com.fasterxml.jackson.databind.ObjectMapper();
-                @SuppressWarnings("unchecked")
-                Map<String, Object> metadata = objectMapper.readValue(metadataPath.toFile(), Map.class);
-                metadata.put("errorLog", errorLog);
-                objectMapper.writerWithDefaultPrettyPrinter().writeValue(metadataPath.toFile(), metadata);
+            final Path metadataPath = resolveMetadataPath(appId);
+            if (!Files.exists(metadataPath)) {
+                return;
             }
+            @SuppressWarnings("unchecked")
+            final Map<String, Object> metadata = OBJECT_MAPPER.readValue(metadataPath.toFile(), Map.class);
+            metadata.putAll(updates);
+            OBJECT_MAPPER.writerWithDefaultPrettyPrinter().writeValue(metadataPath.toFile(), metadata);
         } catch (Exception e) {
-            log.error("[SubAgent] 更新 metadata errorLog 失败: appId={}", appId, e);
+            log.error("[SubAgent] 更新 metadata 失败: appId={}", appId, e);
         }
     }
 
-    // ── SSE 事件构建辅助方法 ──
+    private Path resolveMetadataPath(String appId) {
+        final Long appIdLong = Long.parseLong(appId);
+        final int versionNum = appVersionService.getMaxVersionNum(appIdLong);
+        return Paths.get(ResourcePathConstant.GENERATED_APPS_DIR, appId, "v" + versionNum)
+                .resolve(METADATA_FILE);
+    }
 
-    private ServerSentEvent<String> phaseEvent(String phase, int attempt) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("phase", phase);
-        data.put("attempt", attempt);
+    /**
+     * SSE 事件构建
+     */
+    private ServerSentEvent<String> phaseEvent(FixPhaseEnum phase, int attempt) {
         return ServerSentEvent.<String>builder()
-                .event("phase")
-                .data(JSONUtil.toJsonStr(data))
+                .event(SseEventTypeEnum.PHASE.getValue())
+                .data(JSONUtil.toJsonStr(Map.of("phase", phase.getValue(), "attempt", attempt)))
                 .build();
     }
 
     private ServerSentEvent<String> dataEvent(String chunk) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("d", chunk);
         return ServerSentEvent.<String>builder()
-                .data(JSONUtil.toJsonStr(data))
+                .data(JSONUtil.toJsonStr(Map.of("d", chunk)))
                 .build();
     }
 
-    private ServerSentEvent<String> buildResultEvent(boolean success, int attempt, String log) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("success", success);
-        data.put("attempt", attempt);
-        data.put("log", log != null ? log : "");
+    private ServerSentEvent<String> buildResultEvent(boolean success, int attempt, String logMsg) {
         return ServerSentEvent.<String>builder()
-                .event("build-result")
-                .data(JSONUtil.toJsonStr(data))
+                .event(SseEventTypeEnum.BUILD_RESULT.getValue())
+                .data(JSONUtil.toJsonStr(Map.of(
+                        "success", success,
+                        "attempt", attempt,
+                        "log", logMsg != null ? logMsg : "")))
                 .build();
     }
 
-    private ServerSentEvent<String> doneEvent(boolean success, int totalAttempts, String summary, String aiContent) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("success", success);
-        data.put("totalAttempts", totalAttempts);
-        if (summary != null) data.put("summary", summary);
-        if (aiContent != null) data.put("aiContent", aiContent);
+    private ServerSentEvent<String> doneEvent(DoneEventPayload payload) {
+        final Map<String, Object> data = new HashMap<>();
+        data.put("success", payload.success());
+        data.put("totalAttempts", payload.totalAttempts());
+        if (payload.summary() != null) {
+            data.put("summary", payload.summary());
+        }
+        if (payload.aiContent() != null) {
+            data.put("aiContent", payload.aiContent());
+        }
         return ServerSentEvent.<String>builder()
-                .event("done")
+                .event(SseEventTypeEnum.DONE.getValue())
                 .data(JSONUtil.toJsonStr(data))
                 .build();
     }
 
     private ServerSentEvent<String> errorEvent(String message) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("error", message);
         return ServerSentEvent.<String>builder()
-                .event("error")
-                .data(JSONUtil.toJsonStr(data))
+                .event(SseEventTypeEnum.ERROR.getValue())
+                .data(JSONUtil.toJsonStr(Map.of("error", message)))
                 .build();
     }
 }
