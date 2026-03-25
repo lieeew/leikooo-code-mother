@@ -2,6 +2,8 @@ package com.leikooo.codemother.ai.tools;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.leikooo.codemother.model.dto.ToolsContext;
+import com.leikooo.codemother.model.enums.AgentType;
 import com.leikooo.codemother.utils.ConversationUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.chat.model.ToolContext;
@@ -38,6 +40,15 @@ public class TodolistTools extends BaseTools {
             .expireAfterWrite(Duration.ofMinutes(30))
             .build();
 
+    private String buildCacheKey(String appId, AgentType agentType) {
+        return appId + ":" + agentType.name();
+    }
+
+    private String getCacheKey(ToolContext toolContext) {
+        ToolsContext ctx = ConversationUtils.getToolsContext(toolContext);
+        return buildCacheKey(ctx.appId(), ctx.agentType());
+    }
+
     @Tool(description = "Update task list. Track progress on multi-step tasks. Pass the full list of items each time (replaces previous list). " +
             "Each item must have id, text, status. Status: pending, in_progress, completed. Only one item can be in_progress."
     )
@@ -47,16 +58,12 @@ public class TodolistTools extends BaseTools {
             ToolContext toolContext
     ) {
         try {
-            String conversationId = ConversationUtils.getToolsContext(toolContext).appId();
-            if (items == null || items.isEmpty()) {
-                TODOLIST_CACHE.invalidate(conversationId);
-                return "No todos.";
-            }
+            String cacheKey = getCacheKey(toolContext);
             if (items.size() > MAX_TODOS) {
                 return "Error: Max " + MAX_TODOS + " todos allowed";
             }
             List<TodoItem> validated = validateAndConvert(items);
-            TODOLIST_CACHE.put(conversationId, validated);
+            TODOLIST_CACHE.put(cacheKey, validated);
             return render(validated);
         } catch (IllegalArgumentException e) {
             return "Error: " + e.getMessage();
@@ -90,8 +97,8 @@ public class TodolistTools extends BaseTools {
 
     @Tool(description = "Read the current todo list for this conversation. Use this to check progress and see what tasks remain.")
     public String todoRead(ToolContext toolContext) {
-        String conversationId = ConversationUtils.getToolsContext(toolContext).appId();
-        List<TodoItem> items = TODOLIST_CACHE.getIfPresent(conversationId);
+        String cacheKey = getCacheKey(toolContext);
+        List<TodoItem> items = TODOLIST_CACHE.getIfPresent(cacheKey);
         return items == null || items.isEmpty() ? "No todos." : render(items);
     }
 
@@ -108,6 +115,20 @@ public class TodolistTools extends BaseTools {
         long done = items.stream().filter(t -> "completed".equals(t.status())).count();
         sb.append("\n(").append(done).append("/").append(items.size()).append(" completed)");
         return sb.append("\n\n").toString();
+    }
+
+    /**
+     * 清理指定 appId 和 agentType 的缓存
+     */
+    public static void cleanup(String appId, AgentType agentType) {
+        TODOLIST_CACHE.invalidate(appId + ":" + agentType.name());
+    }
+
+    /**
+     * 清理指定 appId 下所有 agentType 的缓存
+     */
+    public static void cleanupAll(String appId) {
+        TODOLIST_CACHE.asMap().keySet().removeIf(key -> key.startsWith(appId + ":"));
     }
 
     @Override

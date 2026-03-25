@@ -9,7 +9,6 @@ import com.leikooo.codemother.service.ToolCallRecordService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
-import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -86,12 +85,16 @@ public class ChatClientConfig {
             ChatModel primaryChatModel,
             ExecuteToolAdvisor executeToolAdvisor,
             SystemMessageFirstAdvisor systemMessageFirstAdvisor,
-            FileTools fileTools, TodolistTools todolistTools, ToolAdvisor toolAdvisor) {
+            FileTools fileTools,
+            TodolistTools todolistTools,
+            ToolAdvisor toolAdvisor) {
+        TodolistCacheCleanupAdvisor todolistCacheCleanupAdvisor = new TodolistCacheCleanupAdvisor();
         return ChatClient.builder(primaryChatModel)
                 .defaultAdvisors(
                         executeToolAdvisor,
                         systemMessageFirstAdvisor,
                         toolAdvisor,
+                        todolistCacheCleanupAdvisor,
                         MessageChatMemoryAdvisor.builder(
                                 MessageWindowChatMemory.builder()
                                         .maxMessages(100)

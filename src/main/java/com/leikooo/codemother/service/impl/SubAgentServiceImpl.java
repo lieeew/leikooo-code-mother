@@ -4,6 +4,7 @@ import cn.hutool.json.JSONUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leikooo.codemother.ai.AiChatClient;
 import com.leikooo.codemother.ai.GenerationManager;
+import com.leikooo.codemother.ai.tools.TodolistTools;
 import com.leikooo.codemother.constant.ResourcePathConstant;
 import com.leikooo.codemother.model.dto.GenAppDto;
 import com.leikooo.codemother.model.entity.AppVersion;
@@ -60,18 +61,21 @@ public class SubAgentServiceImpl implements SubAgentService {
     private final GenerationManager generationManager;
     private final ChatHistoryService chatHistoryService;
     private final Executor fixExecutor;
+    private final TodolistTools todolistTools;
 
     public SubAgentServiceImpl(
             AiChatClient aiChatClient,
             AppVersionService appVersionService,
             GenerationManager generationManager,
             ChatHistoryService chatHistoryService,
-            @Qualifier("fixExecutor") Executor fixExecutor) {
+            @Qualifier("fixExecutor") Executor fixExecutor,
+            TodolistTools todolistTools) {
         this.aiChatClient = aiChatClient;
         this.appVersionService = appVersionService;
         this.generationManager = generationManager;
         this.chatHistoryService = chatHistoryService;
         this.fixExecutor = fixExecutor;
+        this.todolistTools = todolistTools;
     }
 
     private record AiFixResult(boolean success, String errorMessage) {

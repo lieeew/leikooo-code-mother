@@ -148,28 +148,54 @@ export class VisualEditor {
   private injectEditScript() {
     if (!this.iframe) return
 
-    const waitForIframeLoad = () => {
-      try {
-        if (this.iframe!.contentWindow && this.iframe!.contentDocument) {
-          // 检查是否已经注入过脚本
-          if (this.iframe!.contentDocument.getElementById('visual-edit-script')) {
-            this.sendMessageToIframe({
-              type: 'TOGGLE_EDIT_MODE',
-              editMode: true,
-            })
-            return
-          }
+    let retryCount = 0
+    const maxRetries = 50 // 最多等待 5 秒
 
-          const script = this.generateEditScript()
-          const scriptElement = this.iframe!.contentDocument.createElement('script')
-          scriptElement.id = 'visual-edit-script'
-          scriptElement.textContent = script
-          this.iframe!.contentDocument.head.appendChild(scriptElement)
-        } else {
+    const waitForIframeLoad = () => {
+      retryCount++
+
+      if (retryCount > maxRetries) {
+        console.error('[VisualEditor] iframe 加载超时 (5秒)')
+        return
+      }
+
+      try {
+        const doc = this.iframe!.contentDocument
+
+        // 检查文档是否存在
+        if (!doc) {
+          console.log('[VisualEditor] 等待 iframe 文档...')
           setTimeout(waitForIframeLoad, 100)
+          return
         }
-      } catch {
-        // 静默处理注入失败
+
+        // 关键修复：检查文档是否完全加载
+        if (doc.readyState !== 'complete') {
+          console.log(`[VisualEditor] 等待文档加载... readyState: ${doc.readyState}`)
+          setTimeout(waitForIframeLoad, 100)
+          return
+        }
+
+        // 检查是否已经注入过脚本
+        if (doc.getElementById('visual-edit-script')) {
+          console.log('[VisualEditor] 脚本已存在，发送 TOGGLE_EDIT_MODE')
+          this.sendMessageToIframe({
+            type: 'TOGGLE_EDIT_MODE',
+            editMode: true,
+          })
+          return
+        }
+
+        // 注入脚本
+        const script = this.generateEditScript()
+        const scriptElement = doc.createElement('script')
+        scriptElement.id = 'visual-edit-script'
+        scriptElement.textContent = script
+        doc.head.appendChild(scriptElement)
+        console.log('[VisualEditor] 脚本注入成功')
+      } catch (error) {
+        console.error('[VisualEditor] 脚本注入失败:', error)
+        setTimeout(waitForIframeLoad, 100)
       }
     }
 

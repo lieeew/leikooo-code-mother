@@ -1,6 +1,5 @@
 package com.leikooo.codemother.ai;
 
-import com.leikooo.codemother.ai.tools.FileTools;
 import com.leikooo.codemother.model.dto.ChatContext;
 import com.leikooo.codemother.model.dto.GenAppDto;
 import com.leikooo.codemother.model.dto.ToolsContext;
@@ -53,7 +52,7 @@ public class AiChatClient {
                 .tools()
                 .user(message)
                 .advisors(advisorSpec -> {
-                    advisorSpec.param(GEN_APP_INFO, new ChatContext(appId, userId));
+                    advisorSpec.param(GEN_APP_INFO, ChatContext.of(appId, userId));
                     advisorSpec.param(CONVERSATION_ID, appId);
                 })
                 .advisors(MessageChatMemoryAdvisor
@@ -63,7 +62,7 @@ public class AiChatClient {
                                 .build())
                         .build())
                 .system(classPathResource, UTF_8)
-                .toolContext(Map.of(CONVERSATION_ID, appId, GEN_APP_INFO, new ToolsContext(appId, userId)))
+                .toolContext(Map.of(CONVERSATION_ID, appId, GEN_APP_INFO, ToolsContext.of(appId, userId)))
                 .stream().content();
     }
 
@@ -96,11 +95,11 @@ public class AiChatClient {
         return fixChatClient.prompt()
                 .user(genAppDto.getMessage())
                 .advisors(advisorSpec -> {
-                    advisorSpec.param(GEN_APP_INFO, new ChatContext(appId, userId));
+                    advisorSpec.param(GEN_APP_INFO, ChatContext.subAgent(appId, userId));
                     advisorSpec.param(CONVERSATION_ID, appId);
                 })
                 .system(new ClassPathResource("prompt/fix-code-system-prompt.md"), UTF_8)
-                .toolContext(Map.of(CONVERSATION_ID, appId, GEN_APP_INFO, new ToolsContext(appId, userId)))
+                .toolContext(Map.of(CONVERSATION_ID, appId, GEN_APP_INFO, ToolsContext.subAgent(appId, userId)))
                 .stream().content();
     }
 
@@ -123,10 +122,10 @@ public class AiChatClient {
                                 .build())
                         .build())
                 .advisors(advisorSpec -> {
-                    advisorSpec.param(GEN_APP_INFO, new ChatContext(appId.toString(), userId));
+                    advisorSpec.param(GEN_APP_INFO, ChatContext.of(appId.toString(), userId));
                     advisorSpec.param(CONVERSATION_ID, appId);
                 })
-                .toolContext(Map.of(CONVERSATION_ID, appId.toString(), GEN_APP_INFO, new ToolsContext(appId.toString(), userId)))
+                .toolContext(Map.of(CONVERSATION_ID, appId.toString(), GEN_APP_INFO, ToolsContext.of(appId.toString(), userId)))
                 .call().content();
         ThinkingTagCleaner thinkingTagCleaner = new ThinkingTagCleaner();
         String normalizedResponse = normalizeEnumValue(thinkingTagCleaner.clean(rawResponse));
