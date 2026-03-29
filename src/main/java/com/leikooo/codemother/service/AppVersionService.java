@@ -2,6 +2,7 @@ package com.leikooo.codemother.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.leikooo.codemother.model.entity.AppVersion;
+import com.leikooo.codemother.model.enums.VersionStatusEnum;
 import com.leikooo.codemother.model.vo.RuntimeCheckResultVO;
 
 import java.util.List;
@@ -34,6 +35,21 @@ public interface AppVersionService extends IService<AppVersion> {
      * @return 版本记录
      */
     AppVersion getByVersionNum(Long appId, Integer versionNum);
+
+    /**
+     * 获取当前激活版本号
+     * @param appId 应用ID
+     * @return 当前版本号，不存在返回 null
+     */
+    Integer getCurrentVersionNum(Long appId);
+
+    /**
+     * 更新指定版本状态
+     * @param appId 应用ID
+     * @param versionNum 版本号
+     * @param status 版本状态
+     */
+    void updateVersionStatus(Long appId, Integer versionNum, VersionStatusEnum status);
 
     /**
      * 回滚到指定版本

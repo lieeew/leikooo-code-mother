@@ -96,6 +96,24 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
                 .one();
     }
 
+    @Override
+    public Integer getCurrentVersionNum(Long appId) {
+        App app = appService.getById(appId);
+        return app != null ? app.getCurrentVersionNum() : null;
+    }
+
+    @Override
+    public void updateVersionStatus(Long appId, Integer versionNum, VersionStatusEnum status) {
+        if (versionNum == null || status == null) {
+            return;
+        }
+        this.lambdaUpdate()
+                .eq(AppVersion::getAppId, appId)
+                .eq(AppVersion::getVersionNum, versionNum)
+                .set(AppVersion::getStatus, status.name())
+                .update();
+    }
+
     private long calculateDirectorySize(Path path) {
         long size = 0;
         try (Stream<Path> walk = Files.walk(path)) {

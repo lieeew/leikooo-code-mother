@@ -656,7 +656,7 @@ const fixError = async () => {
 
         // === 通知主 Agent：SubAgent 修复完成 ===
         // 从 aiContent 中提取 [Fix Summary] 部分发给 /chat/gen/code
-        if (aiContent) {
+        if (success && aiContent) {
           // 提取 [Fix Summary] 部分
           const fixSummaryMatch = aiContent.match(/\[Fix Summary\]([\s\S]*?)(?=Files modified:|$)/i)
           const fixSummary = fixSummaryMatch ? `[Fix Summary]${fixSummaryMatch[1]}` : aiContent
