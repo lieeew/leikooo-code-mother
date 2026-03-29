@@ -438,16 +438,24 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
             IOUtils.copy(cosManager.getObject(cosKey).getObjectContent(), fos);
         }
 
+        Path targetDirPath = targetDir.toPath();
         try (FileInputStream fis = new FileInputStream(tempZip);
              ZipInputStream zis = new ZipInputStream(fis)) {
 
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                File file = new File(targetDir, entry.getName());
+                Path entryPath = targetDirPath.resolve(entry.getName()).normalize();
+                if (!entryPath.startsWith(targetDirPath)) {
+                    throw new IOException("Bad zip entry: " + entry.getName());
+                }
+                File file = entryPath.toFile();
                 if (entry.isDirectory()) {
                     file.mkdirs();
                 } else {
-                    file.getParentFile().mkdirs();
+                    File parent = file.getParentFile();
+                    if (parent != null) {
+                        parent.mkdirs();
+                    }
                     try (FileOutputStream fos = new FileOutputStream(file)) {
                         byte[] buffer = new byte[8192];
                         int len;
