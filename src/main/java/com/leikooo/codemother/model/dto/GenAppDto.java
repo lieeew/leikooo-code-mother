@@ -32,6 +32,11 @@ public class GenAppDto {
      */
     private UserVO userLogin;
 
+    /**
+     * 独立聊天会话 id
+     */
+    private String conversationId;
+
     public GenAppDto(String message, String appId, CodeGenTypeEnum codeGenTypeEnum, UserVO userLogin) {
         this.message = message;
         this.appId = appId;
@@ -43,6 +48,13 @@ public class GenAppDto {
         this.message = message;
         this.appId = appId;
         this.userLogin = userLogin;
+    }
+
+    public GenAppDto(String message, String appId, UserVO userLogin, String conversationId) {
+        this.message = message;
+        this.appId = appId;
+        this.userLogin = userLogin;
+        this.conversationId = conversationId;
     }
 
     public GenAppDto(String message, String appId) {

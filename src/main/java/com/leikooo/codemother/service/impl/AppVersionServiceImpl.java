@@ -96,6 +96,24 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
                 .one();
     }
 
+    @Override
+    public Integer getCurrentVersionNum(Long appId) {
+        App app = appService.getById(appId);
+        return app != null ? app.getCurrentVersionNum() : null;
+    }
+
+    @Override
+    public void updateVersionStatus(String appId, Integer versionNum, VersionStatusEnum status) {
+        if (versionNum == null || status == null) {
+            return;
+        }
+        this.lambdaUpdate()
+                .eq(AppVersion::getAppId, appId)
+                .eq(AppVersion::getVersionNum, versionNum)
+                .set(AppVersion::getStatus, status.name())
+                .update();
+    }
+
     private long calculateDirectorySize(Path path) {
         long size = 0;
         try (Stream<Path> walk = Files.walk(path)) {
@@ -354,7 +372,9 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
             errorMsg.append("构建错误:\n").append(errorLog);
         }
         if (!runtimeErrorLog.isEmpty()) {
-            if (!errorMsg.isEmpty()) errorMsg.append("\n\n");
+            if (!errorMsg.isEmpty()) {
+                errorMsg.append("\n\n");
+            }
             errorMsg.append("运行时错误:\n").append(runtimeErrorLog);
         }
 
