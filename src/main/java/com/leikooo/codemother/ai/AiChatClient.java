@@ -7,7 +7,6 @@ import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
-import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
 import org.springframework.ai.converter.ThinkingTagCleaner;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.ClassPathResource;
@@ -30,16 +29,13 @@ public class AiChatClient {
     private final ChatClient chatClient;
     private final ChatClient simpleChatClient;
     private final ChatClient fixChatClient;
-    private final JdbcChatMemoryRepository chatMemoryRepository;
 
     public AiChatClient(@Qualifier("codeGenChatClient") ChatClient chatClient,
                         @Qualifier("simpleChatClient") ChatClient simpleChatClient,
-                        @Qualifier("fixChatClient") ChatClient fixChatClient,
-                        JdbcChatMemoryRepository chatMemoryRepository) {
+                        @Qualifier("fixChatClient") ChatClient fixChatClient) {
         this.chatClient = chatClient;
         this.simpleChatClient = simpleChatClient;
         this.fixChatClient = fixChatClient;
-        this.chatMemoryRepository = chatMemoryRepository;
     }
 
     public Flux<String> generateCode(GenAppDto genAppDto) {
@@ -55,14 +51,8 @@ public class AiChatClient {
                     advisorSpec.param(GEN_APP_INFO, ChatContext.of(appId, userId));
                     advisorSpec.param(CONVERSATION_ID, appId);
                 })
-                .advisors(MessageChatMemoryAdvisor
-                        .builder(MessageWindowChatMemory.builder()
-                                .chatMemoryRepository(chatMemoryRepository)
-                                .maxMessages(100)
-                                .build())
-                        .build())
                 .system(classPathResource, UTF_8)
-                .toolContext(Map.of(CONVERSATION_ID, appId, GEN_APP_INFO, ToolsContext.of(appId, userId)))
+                .toolContext(Map.of(GEN_APP_INFO, ToolsContext.of(appId, userId)))
                 .stream().content();
     }
 
@@ -92,14 +82,15 @@ public class AiChatClient {
     public Flux<String> fixCode(GenAppDto genAppDto) {
         String userId = genAppDto.getUserLogin().getId();
         String appId = genAppDto.getAppId();
+        String conversationId = genAppDto.getConversationId();
         return fixChatClient.prompt()
                 .user(genAppDto.getMessage())
                 .advisors(advisorSpec -> {
                     advisorSpec.param(GEN_APP_INFO, ChatContext.subAgent(appId, userId));
-                    advisorSpec.param(CONVERSATION_ID, appId);
+                    advisorSpec.param(CONVERSATION_ID, conversationId);
                 })
                 .system(new ClassPathResource("prompt/fix-code-system-prompt.md"), UTF_8)
-                .toolContext(Map.of(CONVERSATION_ID, appId, GEN_APP_INFO, ToolsContext.subAgent(appId, userId)))
+                .toolContext(Map.of(GEN_APP_INFO, ToolsContext.subAgent(appId, userId)))
                 .stream().content();
     }
 

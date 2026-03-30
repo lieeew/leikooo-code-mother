@@ -15,9 +15,12 @@ import com.leikooo.codemother.service.AppVersionService;
 import com.leikooo.codemother.service.SubAgentService;
 import com.leikooo.codemother.utils.BuildOutputValidator;
 import com.leikooo.codemother.utils.ProjectPathUtils;
+import com.leikooo.codemother.utils.UuidV7Generator;
 import com.leikooo.codemother.utils.VueBuildUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -53,13 +56,17 @@ public class SubAgentServiceImpl implements SubAgentService {
 
     private final AiChatClient aiChatClient;
     private final AppVersionService appVersionService;
+    private final ChatMemoryRepository subAgentChatMemoryRepository;
     private final String ERROR_LOG = "errorLog";
 
     public SubAgentServiceImpl(
             AiChatClient aiChatClient,
-            AppVersionService appVersionService) {
+            AppVersionService appVersionService,
+            @Qualifier("subAgentChatMemoryRepository")
+            ChatMemoryRepository subAgentChatMemoryRepository) {
         this.aiChatClient = aiChatClient;
         this.appVersionService = appVersionService;
+        this.subAgentChatMemoryRepository = subAgentChatMemoryRepository;
     }
 
     private record BuildValidationResult(boolean success, String errorLog) {
@@ -73,16 +80,16 @@ public class SubAgentServiceImpl implements SubAgentService {
      */
     private static class FixLoopContext {
         private final String appId;
-        private final Long appIdLong;
         private final Integer targetVersionNum;
         private final UserVO user;
+        private final String conversationId;
         private final StringBuilder aiContent = new StringBuilder();
 
-        FixLoopContext(String appId, Long appIdLong, Integer targetVersionNum, UserVO user) {
+        FixLoopContext(String appId, Integer targetVersionNum, UserVO user, String conversationId) {
             this.appId = appId;
-            this.appIdLong = appIdLong;
             this.targetVersionNum = targetVersionNum;
             this.user = user;
+            this.conversationId = conversationId;
         }
 
         String aiContentAsString() {
@@ -94,7 +101,7 @@ public class SubAgentServiceImpl implements SubAgentService {
         return Mono.fromCallable(() -> getErrorLogs(context))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMapMany(errorLog -> {
-                    final GenAppDto dto = new GenAppDto(errorLog, context.appId, context.user);
+                    final GenAppDto dto = new GenAppDto(errorLog, context.appId, context.user, context.conversationId);
                     return Flux.concat(
                             Flux.just(phaseEvent(FixPhaseEnum.FIXING, attempt)),
                             aiChatClient.fixCode(dto)
@@ -122,9 +129,26 @@ public class SubAgentServiceImpl implements SubAgentService {
                     if (currentVersionNum == null || currentVersionNum <= 0) {
                         return missingVersionEvents();
                     }
-                    final FixLoopContext context = new FixLoopContext(appId, appIdLong, currentVersionNum, user);
-                    return doFixLoopReactive(context, 1);
+                    final FixLoopContext context =
+                            new FixLoopContext(appId, currentVersionNum, user, generateSubAgentConversationId(appId));
+                    return doFixLoopReactive(context, 1)
+                            .doFinally(signalType -> cleanupConversationMemory(context));
                 });
+    }
+
+    private String generateSubAgentConversationId(String appId) {
+        return "subfix:" + appId + ":" + UuidV7Generator.bytesToUuid(UuidV7Generator.generate());
+    }
+
+    private void cleanupConversationMemory(FixLoopContext context) {
+        try {
+            subAgentChatMemoryRepository.deleteByConversationId(context.conversationId);
+            log.info("[SubAgent] Cleared chat memory, appId: {}, conversationId: {}",
+                    context.appId, context.conversationId);
+        } catch (Exception e) {
+            log.warn("[SubAgent] Failed to clear chat memory, appId: {}, conversationId: {}",
+                    context.appId, context.conversationId, e);
+        }
     }
 
     private Flux<ServerSentEvent<String>> continueAfterAi(FixLoopContext context, int attempt) {
@@ -226,7 +250,7 @@ public class SubAgentServiceImpl implements SubAgentService {
 
     private void syncVersionStatus(FixLoopContext context, BuildValidationResult buildResult) {
         VersionStatusEnum status = buildResult.success() ? VersionStatusEnum.SUCCESS : VersionStatusEnum.NEED_FIX;
-        appVersionService.updateVersionStatus(context.appIdLong, context.targetVersionNum, status);
+        appVersionService.updateVersionStatus(context.appId, context.targetVersionNum, status);
     }
 
     /**

@@ -4,6 +4,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leikooo.codemother.exception.BusinessException;
 import com.leikooo.codemother.exception.ErrorCode;
+import com.leikooo.codemother.model.dto.ToolsContext;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -32,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.leikooo.codemother.constant.AppConstant.GEN_APP_INFO;
 import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 /**
@@ -169,7 +171,8 @@ public class ExecuteToolAdvisor implements StreamAdvisor {
      */
     private String getAppId(ChatClientRequest finalRequest) {
         if (finalRequest.prompt().getOptions() instanceof ToolCallingChatOptions toolCallingChatOptions) {
-            return toolCallingChatOptions.getToolContext().get(CONVERSATION_ID).toString();
+            ToolsContext toolsContext = (ToolsContext) toolCallingChatOptions.getToolContext().get(GEN_APP_INFO);
+            return toolsContext.appId();
         }
         throw new BusinessException(ErrorCode.SYSTEM_ERROR);
     }

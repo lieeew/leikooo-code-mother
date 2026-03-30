@@ -103,7 +103,7 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
     }
 
     @Override
-    public void updateVersionStatus(Long appId, Integer versionNum, VersionStatusEnum status) {
+    public void updateVersionStatus(String appId, Integer versionNum, VersionStatusEnum status) {
         if (versionNum == null || status == null) {
             return;
         }
@@ -372,7 +372,9 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
             errorMsg.append("构建错误:\n").append(errorLog);
         }
         if (!runtimeErrorLog.isEmpty()) {
-            if (!errorMsg.isEmpty()) errorMsg.append("\n\n");
+            if (!errorMsg.isEmpty()) {
+                errorMsg.append("\n\n");
+            }
             errorMsg.append("运行时错误:\n").append(runtimeErrorLog);
         }
 

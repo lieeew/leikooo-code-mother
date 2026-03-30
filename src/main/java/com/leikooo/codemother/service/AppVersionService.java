@@ -49,7 +49,7 @@ public interface AppVersionService extends IService<AppVersion> {
      * @param versionNum 版本号
      * @param status 版本状态
      */
-    void updateVersionStatus(Long appId, Integer versionNum, VersionStatusEnum status);
+    void updateVersionStatus(String appId, Integer versionNum, VersionStatusEnum status);
 
     /**
      * 回滚到指定版本

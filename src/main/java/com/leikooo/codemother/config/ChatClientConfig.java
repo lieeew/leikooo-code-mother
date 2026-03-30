@@ -8,7 +8,10 @@ import com.leikooo.codemother.service.ObservableRecordService;
 import com.leikooo.codemother.service.ToolCallRecordService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -59,6 +62,7 @@ public class ChatClientConfig {
             TodolistTools todolistTools,
             FileTools fileTools,
             ExecuteToolAdvisor executeToolAdvisor,
+            JdbcChatMemoryRepository chatMemoryRepository,
             ContextTools contextTools) {
         return ChatClient.builder(primaryChatModel)
                 .defaultAdvisors(buildAdvisor, toolAdvisor,
@@ -66,7 +70,14 @@ public class ChatClientConfig {
                         contextCompressionAdvisor,
                         executeToolAdvisor,
                         systemMessageFirstAdvisor, logAdvisor,
+                        MessageChatMemoryAdvisor
+                                .builder(MessageWindowChatMemory.builder()
+                                        .chatMemoryRepository(chatMemoryRepository)
+                                        .maxMessages(100)
+                                        .build())
+                                .build(),
                         observableAdvisor)
+
                 .defaultTools(todolistTools, fileTools, contextTools)
                 .build();
     }
@@ -74,6 +85,11 @@ public class ChatClientConfig {
     @Bean("simpleChatClient")
     public ChatClient simpleChatClient(ChatModel primaryChatModel) {
         return ChatClient.builder(primaryChatModel).build();
+    }
+
+    @Bean("subAgentChatMemoryRepository")
+    public ChatMemoryRepository subAgentChatMemoryRepository() {
+        return new InMemoryChatMemoryRepository();
     }
 
     /**
@@ -87,7 +103,8 @@ public class ChatClientConfig {
             SystemMessageFirstAdvisor systemMessageFirstAdvisor,
             FileTools fileTools,
             TodolistTools todolistTools,
-            ToolAdvisor toolAdvisor) {
+            ToolAdvisor toolAdvisor,
+            @Qualifier("subAgentChatMemoryRepository") ChatMemoryRepository subAgentChatMemoryRepository) {
         TodolistCacheCleanupAdvisor todolistCacheCleanupAdvisor = new TodolistCacheCleanupAdvisor();
         return ChatClient.builder(primaryChatModel)
                 .defaultAdvisors(
@@ -97,6 +114,7 @@ public class ChatClientConfig {
                         todolistCacheCleanupAdvisor,
                         MessageChatMemoryAdvisor.builder(
                                 MessageWindowChatMemory.builder()
+                                        .chatMemoryRepository(subAgentChatMemoryRepository)
                                         .maxMessages(100)
                                         .build()
                         ).build()
