@@ -2,6 +2,27 @@
 
 AI 驱动的代码生成平台。
 
+![Java](https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.4-6DB33F?logo=springboot&logoColor=white)
+![Spring AI](https://img.shields.io/badge/Spring_AI-1.1.2-0A0A0A?logo=spring&logoColor=white)
+![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vuedotjs&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-7.0-646CFF?logo=vite&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-blue.svg)
+
+## 版本信息
+
+- **后端版本**：`0.0.1-SNAPSHOT`（`pom.xml`）
+- **前端版本**：`0.0.0`（`code-mother-fronted/package.json`）
+- **最后同步时间**：`2026-04-08`
+
+## 项目亮点
+
+- **三种代码生成模式**：单 HTML、多文件静态页面、完整 Vue 项目脚手架
+- **AI 工具调用可观测**：记录工具调用前后链路，支持排障与回放分析
+- **自动化错误修复流程**：构建失败后可触发 AI 修复，减少手工排查成本
+- **代码版本可追溯**：支持生成/修复版本留痕、对比与回滚
+- **生成即预览**：产物构建后可快速进入预览，缩短“生成到验证”闭环
+
 ## 功能特性
 
 - **多模式代码生成**：支持单 HTML 文件、多文件静态页面、Vue 项目三种生成模式
@@ -36,9 +57,10 @@ AI 驱动的代码生成平台。
 
 | 分类 | 技术 |
 |------|------|
-| 后端框架 | Spring Boot 4.x |
-| AI 框架 | Spring AI 2.x |
-| 前端框架 | Vue 3 + Vite |
+| 后端框架 | Spring Boot 3.5.4 |
+| AI 框架 | Spring AI 1.1.2 |
+| 前端框架 | Vue 3.5 + Vite 7 |
+| Java | JDK 21 |
 | 数据库 | MySQL + MyBatis-Plus |
 | 缓存 | Redis + Caffeine |
 | 认证 | Sa-Token |
@@ -48,7 +70,7 @@ AI 驱动的代码生成平台。
 
 ### 环境要求
 
-- JDK 17+
+- JDK 21+
 - Node.js 18+
 - MySQL 8.0+
 - Redis 6.0+
