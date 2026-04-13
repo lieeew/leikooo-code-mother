@@ -1,5 +1,6 @@
 package com.leikooo.codemother.utils;
 
+import com.leikooo.codemother.constant.AppConstant;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -31,7 +32,7 @@ public class BuildOutputValidator {
 
         public static ValidationResult validateVueBuild(String projectPath) {
             List<String> errors = new ArrayList<>();
-            Path distPath = Paths.get(projectPath, "dist");
+            Path distPath = Paths.get(projectPath, AppConstant.DIST);
 
             if (!Files.exists(distPath) || !Files.isDirectory(distPath)) {
                 errors.add("❌ dist/ directory not found");

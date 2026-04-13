@@ -90,4 +90,12 @@ public interface AppVersionService extends IService<AppVersion> {
      * @return 运行时检测结果VO
      */
     RuntimeCheckResultVO getRuntimeCheckResult(Long appId);
+
+    /**
+     * 下载指定版本（排除 node_modules）
+     * @param appId 应用ID
+     * @param versionNum 版本号
+     * @return zip 文件字节数组
+     */
+    byte[] downloadVersion(Long appId, Integer versionNum);
 }

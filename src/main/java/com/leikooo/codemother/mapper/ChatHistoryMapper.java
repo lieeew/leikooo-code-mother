@@ -1,7 +1,7 @@
 package com.leikooo.codemother.mapper;
 
-import com.leikooo.codemother.model.entity.ChatHistory;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.leikooo.codemother.model.entity.ChatHistory;
 
 /**
 * @author leikooo

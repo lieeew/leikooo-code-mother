@@ -1,7 +1,6 @@
 package com.leikooo.codemother.event;
 
 import com.leikooo.codemother.ai.AiChatClient;
-import com.leikooo.codemother.event.AppCreatedEvent;
 import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.service.AppService;
 import lombok.extern.slf4j.Slf4j;

@@ -34,7 +34,6 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.leikooo.codemother.constant.AppConstant.GEN_APP_INFO;
-import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 /**
  * 手动执行 tool 的 StreamAdvisor：关闭框架内部执行，自行执行并可在工具返回值中注入提醒（如更新 todo）。

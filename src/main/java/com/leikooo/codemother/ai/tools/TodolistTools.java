@@ -1,9 +1,11 @@
 package com.leikooo.codemother.ai.tools;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leikooo.codemother.model.dto.ToolsContext;
 import com.leikooo.codemother.model.enums.AgentType;
+import com.leikooo.codemother.service.TodoListRedisService;
 import com.leikooo.codemother.utils.ConversationUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.chat.model.ToolContext;
@@ -11,7 +13,6 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,18 +36,22 @@ public class TodolistTools extends BaseTools {
     private record TodoItem(String id, String text, String status) {
     }
 
-    private static final Cache<String, List<TodoItem>> TODOLIST_CACHE = Caffeine.newBuilder()
-            .maximumSize(10_00)
-            .expireAfterWrite(Duration.ofMinutes(30))
-            .build();
+    private final TodoListRedisService todoListRedisService;
+    private final ObjectMapper objectMapper;
 
-    private String buildCacheKey(String appId, AgentType agentType) {
-        return appId + ":" + agentType.name();
+    public TodolistTools(TodoListRedisService todoListRedisService, ObjectMapper objectMapper) {
+        this.todoListRedisService = todoListRedisService;
+        this.objectMapper = objectMapper;
     }
 
-    private String getCacheKey(ToolContext toolContext) {
+    private String getAppId(ToolContext toolContext) {
         ToolsContext ctx = ConversationUtils.getToolsContext(toolContext);
-        return buildCacheKey(ctx.appId(), ctx.agentType());
+        return ctx.appId();
+    }
+
+    private AgentType getAgentType(ToolContext toolContext) {
+        ToolsContext ctx = ConversationUtils.getToolsContext(toolContext);
+        return ctx.agentType();
     }
 
     @Tool(description = "Update task list. Track progress on multi-step tasks. Pass the full list of items each time (replaces previous list). " +
@@ -58,15 +63,19 @@ public class TodolistTools extends BaseTools {
             ToolContext toolContext
     ) {
         try {
-            String cacheKey = getCacheKey(toolContext);
+            String appId = getAppId(toolContext);
+            AgentType agentType = getAgentType(toolContext);
             if (items.size() > MAX_TODOS) {
                 return "Error: Max " + MAX_TODOS + " todos allowed";
             }
             List<TodoItem> validated = validateAndConvert(items);
-            TODOLIST_CACHE.put(cacheKey, validated);
+            String jsonItems = objectMapper.writeValueAsString(validated);
+            todoListRedisService.saveTodoList(appId, agentType, jsonItems);
             return render(validated);
         } catch (IllegalArgumentException e) {
             return "Error: " + e.getMessage();
+        } catch (JsonProcessingException e) {
+            return "Error: Failed to serialize todo list";
         }
     }
 
@@ -97,9 +106,18 @@ public class TodolistTools extends BaseTools {
 
     @Tool(description = "Read the current todo list for this conversation. Use this to check progress and see what tasks remain.")
     public String todoRead(ToolContext toolContext) {
-        String cacheKey = getCacheKey(toolContext);
-        List<TodoItem> items = TODOLIST_CACHE.getIfPresent(cacheKey);
-        return items == null || items.isEmpty() ? "No todos." : render(items);
+        String appId = getAppId(toolContext);
+        AgentType agentType = getAgentType(toolContext);
+        String jsonItems = todoListRedisService.getTodoList(appId, agentType);
+        if (jsonItems == null || jsonItems.isEmpty()) {
+            return "No todos.";
+        }
+        try {
+            List<TodoItem> items = objectMapper.readValue(jsonItems, new TypeReference<List<TodoItem>>() {});
+            return render(items);
+        } catch (JsonProcessingException e) {
+            return "No todos.";
+        }
     }
 
     private String render(List<TodoItem> items) {
@@ -120,15 +138,15 @@ public class TodolistTools extends BaseTools {
     /**
      * 清理指定 appId 和 agentType 的缓存
      */
-    public static void cleanup(String appId, AgentType agentType) {
-        TODOLIST_CACHE.invalidate(appId + ":" + agentType.name());
+    public void cleanup(String appId, AgentType agentType) {
+        todoListRedisService.deleteTodoList(appId, agentType);
     }
 
     /**
      * 清理指定 appId 下所有 agentType 的缓存
      */
-    public static void cleanupAll(String appId) {
-        TODOLIST_CACHE.asMap().keySet().removeIf(key -> key.startsWith(appId + ":"));
+    public void cleanupAll(String appId) {
+        todoListRedisService.deleteAllByAppId(appId);
     }
 
     @Override

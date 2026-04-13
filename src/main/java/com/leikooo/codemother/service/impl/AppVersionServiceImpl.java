@@ -1,11 +1,12 @@
 package com.leikooo.codemother.service.impl;
 
-import cn.hutool.core.io.FileUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leikooo.codemother.config.CosClientConfig;
+import com.leikooo.codemother.constant.AppConstant;
 import com.leikooo.codemother.constant.ResourcePathConstant;
 import com.leikooo.codemother.event.AppCodeRegeneratedEvent;
+import com.leikooo.codemother.exception.BusinessException;
 import com.leikooo.codemother.exception.ErrorCode;
 import com.leikooo.codemother.exception.ThrowUtils;
 import com.leikooo.codemother.manager.CosManager;
@@ -19,7 +20,6 @@ import com.leikooo.codemother.service.AppService;
 import com.leikooo.codemother.service.AppVersionService;
 import com.leikooo.codemother.utils.BuildOutputValidator;
 import com.leikooo.codemother.utils.ProjectPathUtils;
-import com.leikooo.codemother.utils.RuntimeCheckUtils;
 import com.leikooo.codemother.utils.VersionCache;
 import com.leikooo.codemother.utils.VueBuildUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -28,10 +28,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
@@ -43,6 +40,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 @Slf4j
 @Service
@@ -491,8 +489,8 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
     }
 
     private void copyDirectory(Path source, Path target) throws IOException {
-        Path distToSkip = source.resolve("dist");
-        Path nodeModulesToSkip = source.resolve("node_modules");
+        Path distToSkip = source.resolve(AppConstant.DIST);
+        Path nodeModulesToSkip = source.resolve(AppConstant.NODE_MODULES);
         Files.walkFileTree(source, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
@@ -516,13 +514,56 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
     private int countFiles(Path path) throws IOException {
         return (int) Files.walk(path)
                 .filter(Files::isRegularFile)
-                .filter(p -> !p.toString().contains("node_modules"))
-                .filter(p -> !p.toString().contains("dist"))
+                .filter(p -> !p.toString().contains(AppConstant.NODE_MODULES))
+                .filter(p -> !p.toString().contains(AppConstant.DIST))
                 .count();
     }
 
     private void saveMetadata(Path versionPath, Map<String, Object> metadata) throws IOException {
         Path metadataPath = versionPath.resolve("metadata.json");
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(metadataPath.toFile(), metadata);
+    }
+
+    @Override
+    public byte[] downloadVersion(Long appId, Integer versionNum) {
+        AppVersion version = getByVersionNum(appId, versionNum);
+        ThrowUtils.throwIf(version == null, ErrorCode.NOT_FOUND_ERROR, "版本不存在");
+
+        Path versionPath = buildVersionPath(appId, versionNum);
+        ThrowUtils.throwIf(!Files.exists(versionPath), ErrorCode.NOT_FOUND_ERROR, "版本文件不存在");
+
+        try {
+            return zipDirectoryExcludeNodeModules(versionPath);
+        } catch (IOException e) {
+            log.error("下载文件失败 {}", e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+    }
+
+    private byte[] zipDirectoryExcludeNodeModules(Path sourcePath) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (ZipOutputStream zos = new ZipOutputStream(baos)) {
+            Path nodeModules = sourcePath.resolve(AppConstant.NODE_MODULES);
+            Files.walkFileTree(sourcePath, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                    if (dir.equals(nodeModules)) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    Path relativePath = sourcePath.relativize(file);
+                    ZipEntry entry = new ZipEntry(relativePath.toString().replace("\\", "/"));
+                    zos.putNextEntry(entry);
+                    Files.copy(file, zos);
+                    zos.closeEntry();
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        }
+        return baos.toByteArray();
     }
 }

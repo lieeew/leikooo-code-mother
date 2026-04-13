@@ -2,13 +2,10 @@ package com.leikooo.codemother.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.leikooo.codemother.model.dto.ChatHistoryQueryRequest;
 import com.leikooo.codemother.model.entity.ChatHistory;
-import com.baomidou.mybatisplus.extension.service.IService;
 import com.leikooo.codemother.model.vo.UserVO;
-import org.springframework.ai.chat.memory.MessageWindowChatMemory;
-
-import java.time.LocalDateTime;
 
 /**
 * @author leikooo

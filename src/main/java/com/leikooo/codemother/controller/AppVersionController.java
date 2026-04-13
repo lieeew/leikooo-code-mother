@@ -4,26 +4,18 @@ import com.leikooo.codemother.commen.BaseResponse;
 import com.leikooo.codemother.commen.ResultUtils;
 import com.leikooo.codemother.exception.ErrorCode;
 import com.leikooo.codemother.exception.ThrowUtils;
-import com.leikooo.codemother.manager.CosManager;
 import com.leikooo.codemother.model.entity.AppVersion;
 import com.leikooo.codemother.model.vo.AppVersionVO;
 import com.leikooo.codemother.service.AppVersionService;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.List;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 /**
  * @author leikooo
@@ -34,11 +26,9 @@ import java.util.zip.ZipInputStream;
 public class AppVersionController {
 
     private final AppVersionService appVersionService;
-    private final CosManager cosManager;
 
-    public AppVersionController(AppVersionService appVersionService, CosManager cosManager) {
+    public AppVersionController(AppVersionService appVersionService) {
         this.appVersionService = appVersionService;
-        this.cosManager = cosManager;
     }
 
     @GetMapping("/list/{appId}")
@@ -57,35 +47,18 @@ public class AppVersionController {
         return ResultUtils.success(true);
     }
 
-    @GetMapping("/download")
+    @GetMapping("/download/{appId}/{versionNum}")
     public ResponseEntity<byte[]> downloadVersion(
-            @RequestParam(name = "appId") Long appId,
-            @RequestParam(name = "versionNum") Integer versionNum) {
-        AppVersion version = appVersionService.getByVersionNum(appId, versionNum);
-        if (version == null) {
-            return ResponseEntity.notFound().build();
-        }
+            @PathVariable(name = "appId") Long appId,
+            @PathVariable(name = "versionNum") Integer versionNum) {
+        byte[] zipContent = appVersionService.downloadVersion(appId, versionNum);
 
-        try {
-            File tempFile = File.createTempFile("version-" + versionNum, ".zip");
-            try (FileOutputStream fos = new FileOutputStream(tempFile)) {
-                IOUtils.copy(cosManager.getObject(version.getFileUrl()).getObjectContent(), fos);
-            }
+        String fileName = "app-" + appId + "-v" + versionNum + ".zip";
+        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
 
-            byte[] fileContent = Files.readAllBytes(tempFile.toPath());
-            tempFile.delete();
-
-            String fileName = "app-" + appId + "-v" + versionNum + ".zip";
-            String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
-
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_OCTET_STREAM_VALUE)
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + encodedFileName + "\"")
-                    .body(fileContent);
-
-        } catch (Exception e) {
-            log.error("[Download] 下载失败: appId={}, version={}", appId, versionNum, e);
-            return ResponseEntity.internalServerError().build();
-        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_OCTET_STREAM_VALUE)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + encodedFileName + "\"")
+                .body(zipContent);
     }
 }

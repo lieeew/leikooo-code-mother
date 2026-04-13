@@ -265,6 +265,10 @@ declare namespace API {
     children?: FileTreeNodeVO[]
   }
 
+  type fixAppWithSubAgentParams = {
+    appId: number
+  }
+
   type generateAppParams = {
     appId: number
     message: string

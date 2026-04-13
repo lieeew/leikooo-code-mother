@@ -8,7 +8,6 @@ import cn.hutool.core.util.RandomUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.leikooo.codemother.exception.BusinessException;
-import com.leikooo.codemother.exception.ErrorCode;
 import com.leikooo.codemother.exception.ThrowUtils;
 import com.leikooo.codemother.mapper.UserMapper;
 import com.leikooo.codemother.model.dto.request.user.*;

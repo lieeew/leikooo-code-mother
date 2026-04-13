@@ -19,4 +19,14 @@ public interface AppConstant {
      */
     Integer DEFAULT_APP_PRIORITY = 0;
 
+    /**
+     * 前端依赖目录
+     */
+    String NODE_MODULES = "node_modules";
+
+    /**
+     * 构建输出目录
+     */
+    String DIST = "dist";
+
 }

@@ -1,9 +1,10 @@
 package com.leikooo.codemother.service.impl;
 
+import com.leikooo.codemother.constant.AppConstant;
+import com.leikooo.codemother.constant.UserConstant;
 import com.leikooo.codemother.exception.BusinessException;
 import com.leikooo.codemother.exception.ErrorCode;
 import com.leikooo.codemother.exception.ThrowUtils;
-import com.leikooo.codemother.constant.UserConstant;
 import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.model.vo.FileContentVO;
 import com.leikooo.codemother.model.vo.FileListVO;
@@ -34,7 +35,7 @@ public class AppSourceServiceImpl implements AppSourceService {
             ".rs", ".cpp", ".cc", ".c", ".h"
     );
 
-    private static final Set<String> SKIP_DIRS = Set.of("node_modules", "dist");
+    private static final Set<String> SKIP_DIRS = Set.of(AppConstant.NODE_MODULES, AppConstant.DIST);
 
     private static final int MAX_LINES = 2000;
 

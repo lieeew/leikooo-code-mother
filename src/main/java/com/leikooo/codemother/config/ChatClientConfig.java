@@ -8,9 +8,9 @@ import com.leikooo.codemother.service.ObservableRecordService;
 import com.leikooo.codemother.service.ToolCallRecordService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
-import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -104,8 +104,8 @@ public class ChatClientConfig {
             FileTools fileTools,
             TodolistTools todolistTools,
             ToolAdvisor toolAdvisor,
+            TodolistCacheCleanupAdvisor todolistCacheCleanupAdvisor,
             @Qualifier("subAgentChatMemoryRepository") ChatMemoryRepository subAgentChatMemoryRepository) {
-        TodolistCacheCleanupAdvisor todolistCacheCleanupAdvisor = new TodolistCacheCleanupAdvisor();
         return ChatClient.builder(primaryChatModel)
                 .defaultAdvisors(
                         executeToolAdvisor,

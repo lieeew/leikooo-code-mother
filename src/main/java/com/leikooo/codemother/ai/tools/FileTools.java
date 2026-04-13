@@ -3,6 +3,7 @@ package com.leikooo.codemother.ai.tools;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leikooo.codemother.config.CodeGeneratorConfig;
+import com.leikooo.codemother.constant.AppConstant;
 import com.leikooo.codemother.model.entity.App;
 import com.leikooo.codemother.model.enums.CodeGenTypeEnum;
 import com.leikooo.codemother.service.AppService;
@@ -289,7 +290,7 @@ public class FileTools extends BaseTools {
             ".c", ".h", ".json", ".xml", ".yaml", ".yml", ".md", ".sql", ".vue"
     ));
 
-    private static final Set<String> SKIP_DIRS = Set.of("node_modules", "dist");
+    private static final Set<String> SKIP_DIRS = Set.of(AppConstant.NODE_MODULES, AppConstant.DIST);
 
     @Tool(description = "Lists files and directories in a given path. The path parameter must be relative path; ")
     public String listFiles(

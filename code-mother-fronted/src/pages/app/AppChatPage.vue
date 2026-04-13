@@ -1269,10 +1269,15 @@ const downloadCode = async () => {
     message.error('应用ID不存在')
     return
   }
+  const latestVersion = versions.value[versions.value.length - 1]
+  if (!latestVersion?.versionNum) {
+    message.error('暂无版本信息')
+    return
+  }
   downloading.value = true
   try {
     const API_BASE_URL = request.defaults.baseURL || ''
-    const url = `${API_BASE_URL}/app/download/${appId.value}`
+    const url = `${API_BASE_URL}/app/version/download/${appId.value}/${latestVersion.versionNum}`
     const response = await fetch(url, {
       method: 'GET',
       credentials: 'include',
@@ -1282,7 +1287,7 @@ const downloadCode = async () => {
     }
     // 获取文件名
     const contentDisposition = response.headers.get('Content-Disposition')
-    const fileName = contentDisposition?.match(/filename="(.+)"/)?.[1] || `app-${appId.value}.zip`
+    const fileName = contentDisposition?.match(/filename="(.+)"/)?.[1] || `app-${appId.value}-v${latestVersion.versionNum}.zip`
     // 下载文件
     const blob = await response.blob()
     const downloadUrl = URL.createObjectURL(blob)

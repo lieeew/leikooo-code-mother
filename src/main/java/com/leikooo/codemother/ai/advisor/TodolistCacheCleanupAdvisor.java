@@ -10,6 +10,7 @@ import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisor;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisorChain;
+import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
 /**
@@ -18,7 +19,14 @@ import reactor.core.publisher.Flux;
  *              在对话正常结束后自动清理对应的 TodolistCache
  */
 @Slf4j
+@Component
 public class TodolistCacheCleanupAdvisor implements CallAdvisor, StreamAdvisor {
+
+    private final TodolistTools todolistTools;
+
+    public TodolistCacheCleanupAdvisor(TodolistTools todolistTools) {
+        this.todolistTools = todolistTools;
+    }
 
     @Override
     public ChatClientResponse adviseCall(ChatClientRequest request, CallAdvisorChain chain) {
@@ -37,7 +45,7 @@ public class TodolistCacheCleanupAdvisor implements CallAdvisor, StreamAdvisor {
         try {
             ChatContext ctx = ConversationUtils.getChatContext(request.context());
             if (ctx != null && ctx.agentType() != null) {
-                TodolistTools.cleanup(ctx.appId(), ctx.agentType());
+                todolistTools.cleanup(ctx.appId(), ctx.agentType());
                 log.debug("[TodolistCacheCleanup] Cleaned up cache for appId={}, agentType={}",
                         ctx.appId(), ctx.agentType());
             }
